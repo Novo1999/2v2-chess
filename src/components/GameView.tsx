@@ -50,6 +50,14 @@ export function GameView({
 
   useMoveSounds(state.moves);
 
+  const mated = state.status === 'checkmate' ? colorToMove(state) : null;
+  const mate = mated
+    ? {
+        loser: kingSquare(state.fen, mated) ?? '',
+        winner: kingSquare(state.fen, flip(mated)) ?? '',
+      }
+    : null;
+
   const [theme, setTheme] = useBoardTheme();
 
   return (
@@ -72,6 +80,8 @@ export function GameView({
           movable={yours ? SLOT_COLOR[toMove] : null}
           lastMove={last}
           checkSquare={checkSquare}
+          mate={mate}
+          overlay={<ResultCard state={state} you={you} names={names} />}
           onMove={onMove}
         />
 
@@ -151,6 +161,85 @@ function PlayerList({
         );
       })}
     </ol>
+  );
+}
+
+const ENDINGS: Record<string, string> = {
+  checkmate: 'Checkmate',
+  stalemate: 'Stalemate',
+  draw: 'Draw',
+  resigned: 'Resignation',
+  timeout: 'Out of time',
+};
+
+/**
+ * The end of the game, said loudly. It waits a beat before appearing so the
+ * final move is seen landing first, and it can be put away to study the final
+ * position — it comes back only when a game ends again.
+ */
+function ResultCard({
+  state,
+  you,
+  names,
+}: {
+  state: GameState;
+  you: Slot | null;
+  names: Partial<Record<Slot, string>>;
+}) {
+  const over = state.status !== 'active' && state.status !== 'lobby';
+  const endKey = `${state.status}:${state.moves.length}:${state.result}`;
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  if (!over || !state.result || dismissed === endKey) return null;
+
+  const winner: Color | null =
+    state.result === '1-0' ? 'w' : state.result === '0-1' ? 'b' : null;
+  const team = (army: Color) =>
+    state.turnOrder
+      .filter((seat) => SLOT_COLOR[seat] === army)
+      .map((seat) => names[seat])
+      .filter(Boolean)
+      .join(' & ') || (army === 'w' ? 'White' : 'Black');
+
+  const last = state.moves[state.moves.length - 1];
+  const loser = winner ? flip(winner) : null;
+  const detail =
+    state.status === 'checkmate' && last
+      ? `${last.san} by ${names[last.by] ?? last.by}`
+      : state.status === 'resigned' && loser
+        ? `${team(loser)} resigned`
+        : state.status === 'timeout' && loser
+          ? `${team(loser)} ran out of time`
+          : state.status === 'stalemate'
+            ? 'No legal moves, and no check'
+            : 'The game is drawn';
+
+  const personal =
+    you === null ? null : winner === null ? 'draw' : SLOT_COLOR[you] === winner ? 'won' : 'lost';
+
+  return (
+    <div className={`result-backdrop result-${state.status}`} role="dialog" aria-label="Game over">
+      <div className={`result-card ${personal ? `personal-${personal}` : ''}`}>
+        {personal && (
+          <div className="result-personal">
+            {personal === 'won' ? 'You won' : personal === 'lost' ? 'You lost' : 'Draw'}
+          </div>
+        )}
+        <div className="result-title">{ENDINGS[state.status] ?? 'Game over'}</div>
+        <div className="result-winner">
+          {winner ? (
+            <>
+              <span className={`pip pip-${winner}`} />
+              {team(winner)} {team(winner).includes('&') ? 'win' : 'wins'}
+            </>
+          ) : (
+            'Nobody wins'
+          )}
+        </div>
+        <div className="result-detail">{detail}</div>
+        <div className="result-score">{state.result === '1/2-1/2' ? '½-½' : state.result}</div>
+        <button onClick={() => setDismissed(endKey)}>View board</button>
+      </div>
+    </div>
   );
 }
 

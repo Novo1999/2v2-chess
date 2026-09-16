@@ -147,7 +147,10 @@ input[type='text'] {
 }
 .sq.light { background: var(--light); }
 .sq.dark { background: var(--dark); }
-.sq.grabbable { cursor: pointer; }
+.sq.grabbable { cursor: grab; }
+/* The board owns every touch gesture, so dragging a piece never scrolls the page. */
+.board { touch-action: none; }
+.board.dragging, .board.dragging .sq { cursor: grabbing; }
 
 /* Last move repaints the square itself rather than laying a tint over it, so
    the colour is exactly the theme's and never muddies the piece. */
@@ -208,7 +211,7 @@ input[type='text'] {
 .coord {
   position: absolute;
   z-index: 4;
-  font-size: max(9px, 1.6cqi);
+  font-size: max(11px, 2.4cqi);
   font-weight: 700;
   pointer-events: none;
   line-height: 1;
@@ -217,8 +220,8 @@ input[type='text'] {
    readable on every theme without a colour of its own. */
 .sq.light .coord { color: var(--dark); }
 .sq.dark .coord { color: var(--light); }
-.coord.rank { top: 3px; left: 3px; }
-.coord.file { bottom: 2px; right: 3px; }
+.coord.rank { top: 0.5cqi; left: 0.6cqi; }
+.coord.file { bottom: 0.4cqi; right: 0.6cqi; }
 
 /* ---- promotion picker ---- */
 
@@ -487,3 +490,124 @@ button.big { padding: 10px; }
 .swatch.on { border-color: var(--accent); }
 .swatch-light { background: var(--light); }
 .swatch-dark { background: var(--dark); }
+
+/* ---- game over ---- */
+
+@keyframes mated-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 100vmax rgba(220, 38, 38, 0.55); }
+  50% { box-shadow: inset 0 0 0 100vmax rgba(220, 38, 38, 0.85); }
+}
+.sq.mated { animation: mated-pulse 1.2s ease-in-out infinite; }
+.sq.mated.check::after { display: none; }
+.sq.victor { box-shadow: inset 0 0 0 100vmax rgba(250, 204, 21, 0.35); }
+
+.king-badge {
+  position: absolute;
+  top: 4%;
+  right: 4%;
+  z-index: 5;
+  width: 34%;
+  height: 34%;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 900;
+  font-size: 3cqi;
+  line-height: 1;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+  animation: badge-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.badge-mated { background: #dc2626; }
+.badge-victor { background: #16a34a; }
+.badge-victor svg { width: 70%; height: 70%; }
+@keyframes badge-pop {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
+
+.result-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  background: rgba(8, 10, 14, 0.55);
+  /* Wait a beat: the final move should be seen landing before the card. */
+  animation: result-fade 0.4s ease-out 0.7s both;
+}
+@keyframes result-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.result-card {
+  min-width: min(300px, 80%);
+  max-width: 90%;
+  padding: 22px 28px;
+  border-radius: 14px;
+  text-align: center;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  animation: result-rise 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) 0.7s both;
+}
+@keyframes result-rise {
+  from { transform: translateY(18px) scale(0.94); }
+  to { transform: none; }
+}
+.result-personal {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #2b313b;
+  color: var(--muted);
+}
+.personal-won .result-personal { background: #16a34a; color: #fff; }
+.personal-lost .result-personal { background: #dc2626; color: #fff; }
+.result-title { font-size: 34px; font-weight: 800; letter-spacing: -0.5px; }
+.result-checkmate .result-title { color: #f87171; }
+.result-winner { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 600; }
+.result-detail { color: var(--muted); }
+.result-score { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; margin: 4px 0 8px; }
+
+/* ---- drag and drop ---- */
+
+/* The piece left behind while its double is carried: a ghost of where it was. */
+.sq.drag-origin .piece { opacity: 0.3; }
+.board.dragging .sq.grabbable:hover .piece { transform: none; }
+.sq.drag-over { box-shadow: inset 0 0 0 max(3px, 0.5cqi) rgba(255, 255, 255, 0.75); }
+
+.drag-piece {
+  position: absolute;
+  z-index: 30;
+  width: 12.5%;
+  height: 12.5%;
+  /* Centred on the pointer, and a touch larger: it has been picked up. */
+  transform: translate(-50%, -50%) scale(1.12);
+  pointer-events: none;
+  filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.35));
+}
+
+/* ---- annotations ---- */
+
+.sq-mark {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+.annotations {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 6;
+  pointer-events: none;
+}
