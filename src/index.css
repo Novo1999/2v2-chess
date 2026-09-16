@@ -168,6 +168,23 @@ input[type='text'] {
   background-position: 0 0, calc(var(--gx, 0) * 100% / 7) calc(var(--gy, 0) * 100% / 7);
 }
 
+/* Both ends of the queued move stay blue until it is played or cancelled. */
+.sq.premove {
+  background-image: linear-gradient(rgba(65, 135, 245, 0.6), rgba(65, 135, 245, 0.6)), var(--grain);
+  background-size: 100% 100%, 800% 800%;
+  background-position: 0 0, calc(var(--gx, 0) * 100% / 7) calc(var(--gy, 0) * 100% / 7);
+  box-shadow: inset 0 0 0 3px #8abbff;
+}
+.premove-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: #a8ccff;
+}
+.premove-notice button { font-size: 12px; }
+.premove-hint { margin: 0; color: var(--muted); font-size: 12px; }
+
 .sq.selected::after,
 .sq.check::after {
   content: '';

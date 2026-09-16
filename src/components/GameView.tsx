@@ -10,6 +10,7 @@ import { PresenceIcon } from './Presence';
 import { isMuted, playMoveSound, setMuted, type MoveSound } from '../sound';
 import { useAppearance } from '../appearance';
 import { AppearancePicker } from './AppearancePicker';
+import { usePremove } from './usePremove';
 
 interface Props {
   state: GameState;
@@ -19,7 +20,7 @@ interface Props {
    * all three, which is why Phase 3 is a transport change and not a rewrite.
    */
   controls: readonly Slot[];
-  /** The seat this client occupies, for the "you" badge. Null when spectating. */
+  /** The seat this client occupies, for premoves and the "you" badge. Null when spectating. */
   you?: Slot | null;
   /** Display names by seat. Seats without one show their slot label. */
   names?: Partial<Record<Slot, string>>;
@@ -55,6 +56,7 @@ export function GameView({
 
   useMoveSounds(state.moves);
   const { shown, browsing, show } = useHistory(state.moves, yours);
+  const { premovable, premove, queue, cancel } = usePremove(state, you, yours, browsing, onMove);
 
   // Everything drawn on and around the board follows the position being shown;
   // the panel — whose turn, the clocks, the result — stays on the live game.
@@ -86,6 +88,10 @@ export function GameView({
           fen={fen}
           orientation={orientation}
           movable={yours && !browsing ? SLOT_COLOR[toMove] : null}
+          premovable={premovable}
+          premove={premove}
+          onPremove={queue}
+          onCancelPremove={cancel}
           lastMove={last}
           checkSquare={checkSquare}
           pieceSet={appearance.pieces}
@@ -109,6 +115,14 @@ export function GameView({
 
       <aside className="panel">
         <Verdict state={state} yours={yours} inCheck={inCheck} names={names} />
+        {premove ? (
+          <div className="premove-notice">
+            <span role="status">Premove: {premove.from} → {premove.to}{premove.promotion ? ` = ${premove.promotion.toUpperCase()}` : ''}</span>
+            <button onClick={cancel}>Cancel premove</button>
+          </div>
+        ) : premovable && (
+          <p className="premove-hint">Select or drag a piece to premove. Right-click to cancel.</p>
+        )}
         <PlayerList state={state} you={you} names={names} presence={presence} />
         {aside}
         <div className="history">

@@ -229,6 +229,31 @@ describe('pointer interaction', () => {
     expect(screen.getByLabelText('e2').classList.contains('selected')).toBe(true);
   });
 
+  it.each(['pointerdown', 'chord', 'contextmenu'])(
+    'cancels a drag on right-click (%s), including the later left-button release',
+    (event) => {
+      render(<LocalGame />);
+      const el = board();
+      fireEvent.pointerDown(screen.getByLabelText('e2'), { button: 0, buttons: 1, pointerId: 1, ...at('e2') });
+      fireEvent.pointerMove(el, { buttons: 1, pointerId: 1, ...at('e4') });
+      expect(document.querySelector('.drag-piece')).toBeTruthy();
+
+      if (event === 'pointerdown') {
+        fireEvent.pointerDown(el, { button: 2, buttons: 3, pointerId: 1, ...at('e4') });
+      } else if (event === 'chord') {
+        fireEvent.pointerMove(el, { button: 2, buttons: 3, pointerId: 1, ...at('e4') });
+      } else {
+        fireEvent.contextMenu(el, { button: 2, ...at('e4') });
+      }
+      fireEvent.pointerUp(el, { button: 2, pointerId: 1, ...at('e4') });
+      fireEvent.pointerUp(el, { button: 0, pointerId: 1, ...at('e4') });
+
+      expect(document.querySelector('.movelist')).toBeNull();
+      expect(screen.getByLabelText('e2').querySelector('.piece')?.getAttribute('alt')).toBe('white pawn');
+      expect(document.querySelector('.drag-piece, .sq.selected, .sq.target, .annotations')).toBeNull();
+    },
+  );
+
   it('highlights a right-clicked square, and clears it on a second right-click', () => {
     render(<LocalGame />);
     const el = board();

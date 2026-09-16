@@ -181,6 +181,52 @@ export function legalTargets(fen: string, square: string): string[] {
   }
 }
 
+/**
+ * Candidate destinations for a future turn. Blockers, check and pawn captures
+ * may change before then; applyMove checks the real position before execution.
+ */
+export function premoveTargets(fen: string, square: string): string[] {
+  const chess = new Chess(fen);
+  const piece = chess.get(square as never);
+  if (!piece) return [];
+  const file = square.charCodeAt(0) - 97;
+  const rank = Number(square[1]);
+  const targets: string[] = [];
+  const castling = fen.split(' ')[2] ?? '-';
+
+  for (let f = 0; f < 8; f++) {
+    for (let r = 1; r <= 8; r++) {
+      const to = `${String.fromCharCode(97 + f)}${r}`;
+      if (to === square || chess.get(to as never)?.color === piece.color) continue;
+      const dx = Math.abs(f - file);
+      const dy = Math.abs(r - rank);
+      let possible = false;
+      switch (piece.type) {
+        case 'p': {
+          const forward = (r - rank) * (piece.color === 'w' ? 1 : -1);
+          possible = (forward === 1 && dx <= 1) ||
+            (forward === 2 && dx === 0 && rank === (piece.color === 'w' ? 2 : 7));
+          break;
+        }
+        case 'n': possible = dx * dy === 2; break;
+        case 'b': possible = dx === dy; break;
+        case 'r': possible = dx === 0 || dy === 0; break;
+        case 'q': possible = dx === dy || dx === 0 || dy === 0; break;
+        case 'k': {
+          const home = piece.color === 'w' ? 1 : 8;
+          const castle = square === `e${home}` && r === home &&
+            ((f === 6 && castling.includes(piece.color === 'w' ? 'K' : 'k')) ||
+             (f === 2 && castling.includes(piece.color === 'w' ? 'Q' : 'q')));
+          possible = (dx <= 1 && dy <= 1) || castle;
+          break;
+        }
+      }
+      if (possible) targets.push(to);
+    }
+  }
+  return targets;
+}
+
 export function isCheck(fen: string): boolean {
   return new Chess(fen).isCheck();
 }

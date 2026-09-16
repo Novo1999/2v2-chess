@@ -39,6 +39,12 @@ Emulator data is thrown away when you stop it.
   back in a different browser and you get your seat back — see decision #8.
 - If somebody drops, their teammate can play their turn after ~25 seconds. The
   team clock never pauses.
+- Right-click while dragging a piece to cancel the move and put it back.
+- Online players can select or drag a piece while waiting to queue one premove.
+  Both squares turn blue. It plays automatically on your seat's next turn if
+  still legal; otherwise it is cleared. A new premove replaces the old one.
+  Right-click the board or use **Cancel premove** to cancel it. Browsing move
+  history also clears the premove.
 
 ## Playing with friends over the internet
 

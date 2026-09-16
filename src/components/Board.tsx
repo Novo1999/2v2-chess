@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react';
-import type { Color, MoveIntent, PieceSymbol } from '../game/types';
-import { boardOf, isPromotion, legalTargets, pieceAt } from '../game/rules';
+import type { Color, MoveIntent } from '../game/types';
+import { boardOf, isPromotion, legalTargets, pieceAt, premoveTargets } from '../game/rules';
 import { pieceName, pieceUrl } from './pieces';
 import type { PieceSetId } from '../appearance';
 import {
@@ -26,10 +26,14 @@ interface Props {
   orientation: Color;
   /**
    * The army this client may move right now, or null when it may not move at
-   * all — spectating, out of turn, or the game is over. The board is otherwise
-   * identical in every case, so this single prop is the entire interaction gate.
+   * all — spectating, out of turn, or the game is over.
    */
   movable: Color | null;
+  /** The player's army while waiting for their own seat's turn. */
+  premovable?: Color | null;
+  premove?: MoveIntent | null;
+  onPremove?: (intent: MoveIntent) => void;
+  onCancelPremove?: () => void;
   lastMove: { from: string; to: string } | null;
   /** Square of a king in check, painted red. */
   checkSquare: string | null;
@@ -67,12 +71,16 @@ interface Drawing {
   brush: Brush;
 }
 
-const PROMOTION_CHOICES: PieceSymbol[] = ['q', 'r', 'b', 'n'];
+const PROMOTION_CHOICES = ['q', 'r', 'b', 'n'] as const;
 
 export function Board({
   fen,
   orientation,
   movable,
+  premovable = null,
+  premove = null,
+  onPremove,
+  onCancelPremove,
   lastMove,
   checkSquare,
   pieceSet,
@@ -95,9 +103,13 @@ export function Board({
     setSelected(null);
     setPending(null);
     setDrag(null);
-  }, [fen, movable]);
+  }, [fen, movable, premovable, orientation, browsing]);
 
-  const targets = selected ? legalTargets(fen, selected) : [];
+  const interactiveColor = movable ?? premovable;
+  const destinations = (square: string) => movable
+    ? legalTargets(fen, square)
+    : premovable ? premoveTargets(fen, square) : [];
+  const targets = selected ? destinations(selected) : [];
   const rows = boardOf(fen);
 
   const files = orientation === 'w' ? FILES : [...FILES].reverse();
@@ -137,9 +149,23 @@ export function Board({
     if (isPromotion(fen, from, to)) {
       setPending({ from, to });
     } else {
-      onMove({ from, to });
-      setSelected(null);
+      submit({ from, to });
     }
+  }
+
+  function submit(intent: MoveIntent) {
+    if (movable) onMove(intent);
+    else if (premovable) onPremove?.(intent);
+    setPending(null);
+    setSelected(null);
+  }
+
+  function cancelMove() {
+    setDrag(null);
+    setSelected(null);
+    setPending(null);
+    setDrawing(null);
+    onCancelPremove?.();
   }
 
   function capture(e: PointerEvent) {
@@ -154,6 +180,11 @@ export function Board({
   }
 
   function onPointerDown(e: PointerEvent) {
+    if (e.button === 2 && (drag || selected || pending || premove)) {
+      e.preventDefault();
+      cancelMove();
+      return;
+    }
     const square = squareOf(e);
     if (!square) return;
 
@@ -167,7 +198,8 @@ export function Board({
 
     // Any left click wipes the annotations, as on chess.com.
     setAnnotations(NO_ANNOTATIONS);
-    if (!movable) return;
+    if (premove) onCancelPremove?.();
+    if (!interactiveColor) return;
 
     if (selected && targets.includes(square)) {
       commit(selected, square);
@@ -177,7 +209,7 @@ export function Board({
     // Pressing your own piece selects it and arms a drag; changing your mind
     // mid-move re-aims the selection rather than clearing it.
     const piece = pieceAt(fen, square);
-    if (piece?.color !== movable) {
+    if (piece?.color !== interactiveColor) {
       setSelected(null);
       return;
     }
@@ -196,6 +228,12 @@ export function Board({
   }
 
   function onPointerMove(e: PointerEvent) {
+    // Pressing a second mouse button while holding the first emits pointermove,
+    // not pointerdown. Check the buttons bitmask to catch that right-click too.
+    if (drag && (e.buttons & 2) !== 0) {
+      cancelMove();
+      return;
+    }
     if (drawing) {
       const to = squareAt(e);
       if (to && to !== drawing.to) setDrawing({ ...drawing, to });
@@ -219,10 +257,14 @@ export function Board({
     }
     if (!drag) return;
     setDrag(null);
+    if (e.button !== 0) {
+      setSelected(null);
+      return;
+    }
 
     if (drag.started) {
       const to = squareAt(e);
-      if (to && to !== drag.from && legalTargets(fen, drag.from).includes(to)) {
+      if (to && to !== drag.from && destinations(drag.from).includes(to)) {
         commit(drag.from, to);
       }
       // An illegal drop just snaps back, leaving the piece selected so its
@@ -234,6 +276,7 @@ export function Board({
 
   function onPointerCancel() {
     setDrag(null);
+    setSelected(null);
     setDrawing(null);
   }
 
@@ -254,7 +297,13 @@ export function Board({
   const dragged = drag?.started ? pieceAt(fen, drag.from) : null;
 
   return (
-    <div className={`board-wrap ${browsing ? 'browsing' : ''}`}>
+    <div
+      className={`board-wrap ${browsing ? 'browsing' : ''}`}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        if (drag || selected || pending || premove) cancelMove();
+      }}
+    >
       <div
         ref={boardRef}
         className={`board board-${orientation} ${drag?.started ? 'dragging' : ''}`}
@@ -262,7 +311,6 @@ export function Board({
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
-        onContextMenu={(e) => e.preventDefault()}
       >
         {ranks.map((rank) =>
           files.map((file) => {
@@ -278,10 +326,11 @@ export function Board({
               lastMove &&
                 (lastMove.from === square || lastMove.to === square) &&
                 'lastmove',
+              premove && (premove.from === square || premove.to === square) && 'premove',
               checkSquare === square && 'check',
               ending?.loser === square && (ending.kind === 'checkmate' ? 'mated' : 'flagged'),
               ending?.winner === square && 'victor',
-              movable && piece?.color === movable && 'grabbable',
+              interactiveColor && piece?.color === interactiveColor && 'grabbable',
               drag?.started && drag.from === square && 'drag-origin',
               dragOver === square && isTarget && 'drag-over',
             ]
@@ -353,14 +402,10 @@ export function Board({
               {PROMOTION_CHOICES.map((type) => (
                 <button
                   key={type}
-                  aria-label={pieceName(movable ?? 'w', type)}
-                  onClick={() => {
-                    onMove({ ...pending, promotion: type as 'q' });
-                    setPending(null);
-                    setSelected(null);
-                  }}
+                  aria-label={pieceName(interactiveColor ?? 'w', type)}
+                  onClick={() => submit({ ...pending, promotion: type })}
                 >
-                  <img src={pieceUrl(pieceSet, movable ?? 'w', type)} alt="" draggable={false} />
+                  <img src={pieceUrl(pieceSet, interactiveColor ?? 'w', type)} alt="" draggable={false} />
                 </button>
               ))}
             </div>
