@@ -43,7 +43,7 @@ export default function App() {
       <header className="topbar">
         <h1>
           <a href="#" onClick={() => go('')}>
-            Consultation Chess
+            Chesspacito
           </a>
         </h1>
         <span className="sub">

@@ -50,8 +50,10 @@ export function GameView({
 
   useMoveSounds(state.moves);
 
+  const [theme, setTheme] = useBoardTheme();
+
   return (
-    <div className="game">
+    <div className={`game board-theme-${theme}`}>
       <div className="game-main">
         {banner}
         <div className="side-strip">
@@ -90,6 +92,7 @@ export function GameView({
         {aside}
         <MoveList moves={state.moves} />
         <div className="actions">
+          <ThemePicker theme={theme} onTheme={setTheme} />
           <SoundToggle />
           {actions}
         </div>
@@ -148,6 +151,63 @@ function PlayerList({
         );
       })}
     </ol>
+  );
+}
+
+const BOARD_THEMES = ['walnut', 'forest', 'slate'] as const;
+type BoardTheme = (typeof BOARD_THEMES)[number];
+const THEME_KEY = 'consultation-chess:board-theme';
+
+function useBoardTheme(): [BoardTheme, (theme: BoardTheme) => void] {
+  const [theme, setTheme] = useState<BoardTheme>(() => {
+    try {
+      const saved = localStorage.getItem(THEME_KEY);
+      return (BOARD_THEMES as readonly string[]).includes(saved ?? '')
+        ? (saved as BoardTheme)
+        : 'walnut';
+    } catch {
+      return 'walnut';
+    }
+  });
+  return [
+    theme,
+    (next) => {
+      setTheme(next);
+      try {
+        localStorage.setItem(THEME_KEY, next);
+      } catch {
+        /* the choice just will not persist */
+      }
+    },
+  ];
+}
+
+/** Board colours are a personal preference, so each player picks their own. */
+function ThemePicker({
+  theme,
+  onTheme,
+}: {
+  theme: BoardTheme;
+  onTheme: (theme: BoardTheme) => void;
+}) {
+  return (
+    <div className="theme-picker" role="radiogroup" aria-label="Board colours">
+      <span className="label">Board</span>
+      {BOARD_THEMES.map((name) => (
+        <button
+          key={name}
+          role="radio"
+          aria-checked={theme === name}
+          aria-label={name}
+          title={name}
+          className={`swatch board-theme-${name} ${theme === name ? 'on' : ''}`}
+          onClick={() => onTheme(name)}
+        >
+          <span className="swatch-light" />
+          <span className="swatch-dark" />
+        </button>
+      ))}
+    </div>
   );
 }
 

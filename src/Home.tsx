@@ -15,6 +15,7 @@ const CLOCK_CHOICES = [
   { label: '5 min', ms: 5 * 60 * 1000 },
   { label: '10 min', ms: DEFAULT_CLOCK_MS },
   { label: '30 min', ms: 30 * 60 * 1000 },
+  { label: '60 min', ms: 60 * 60 * 1000 },
 ];
 
 export function Home({ name, onName, onOpen, onHotSeat }: Props) {

@@ -1,4 +1,4 @@
-# Consultation Chess
+# Chesspacito
 
 Realtime 2v2 chess. Two players per side, both commanding the same army,
 alternating turns. Firebase Realtime Database, no backend.

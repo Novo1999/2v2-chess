@@ -1,4 +1,4 @@
-# 2v2 Consultation Chess — Plan
+# Chesspacito — Plan
 
 Realtime 2v2 chess. Two players per side, both commanding the same army,
 alternating turns. Firebase RTDB, no backend.

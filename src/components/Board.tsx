@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Color, MoveIntent, PieceSymbol } from '../game/types';
 import { boardOf, isPromotion, legalTargets, pieceAt } from '../game/rules';
-import { GLYPH } from './pieces';
+import { PIECE_IMG, pieceName } from './pieces';
 
 const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'] as const;
 const RANKS = ['8', '7', '6', '5', '4', '3', '2', '1'] as const;
@@ -99,9 +99,12 @@ export function Board({
                 aria-label={square}
               >
                 {piece && (
-                  <span className={`glyph glyph-${piece.color}`}>
-                    {GLYPH[piece.color][piece.type]}
-                  </span>
+                  <img
+                    className="piece"
+                    src={PIECE_IMG[piece.color][piece.type]}
+                    alt={pieceName(piece.color, piece.type)}
+                    draggable={false}
+                  />
                 )}
                 {file === files[0] && <span className="coord rank">{rank}</span>}
                 {rank === ranks[7] && <span className="coord file">{file}</span>}
@@ -119,14 +122,14 @@ export function Board({
               {PROMOTION_CHOICES.map((type) => (
                 <button
                   key={type}
-                  className={`glyph glyph-${movable ?? 'w'}`}
+                  aria-label={pieceName(movable ?? 'w', type)}
                   onClick={() => {
                     onMove({ ...pending, promotion: type as 'q' });
                     setPending(null);
                     setSelected(null);
                   }}
                 >
-                  {GLYPH[movable ?? 'w'][type]}
+                  <img src={PIECE_IMG[movable ?? 'w'][type]} alt="" draggable={false} />
                 </button>
               ))}
             </div>

@@ -1,20 +1,33 @@
 import type { Color, PieceSymbol } from '../game/types';
 
-/** U+FE0E asks for text presentation, so no font swaps a pawn for an emoji. */
-const TEXT = '︎';
-
 /**
- * Figurine glyphs, shared by the board, the captured tray and the promotion
- * picker so a bishop is the same shape everywhere. Both armies deliberately use
- * the solid (black) code points; colour comes from CSS.
+ * Piece artwork: the Chessnut set by Alexis Luengas, Apache 2.0 — see
+ * src/assets/pieces/chessnut/README.md. Shared by the board, the captured tray
+ * and the promotion picker so a bishop is the same drawing everywhere.
  */
-const SOLID: Record<PieceSymbol, string> = {
-  k: '♚' + TEXT,
-  q: '♛' + TEXT,
-  r: '♜' + TEXT,
-  b: '♝' + TEXT,
-  n: '♞' + TEXT,
-  p: '♟' + TEXT,
+const files = import.meta.glob<string>('../assets/pieces/chessnut/*.svg', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+});
+
+function file(name: string): string {
+  const url = files[`../assets/pieces/chessnut/${name}.svg`];
+  if (!url) throw new Error(`missing piece artwork: ${name}.svg`);
+  return url;
+}
+
+const TYPES: PieceSymbol[] = ['k', 'q', 'r', 'b', 'n', 'p'];
+
+export const PIECE_IMG: Record<Color, Record<PieceSymbol, string>> = {
+  w: Object.fromEntries(TYPES.map((t) => [t, file(`w${t.toUpperCase()}`)])) as Record<PieceSymbol, string>,
+  b: Object.fromEntries(TYPES.map((t) => [t, file(`b${t.toUpperCase()}`)])) as Record<PieceSymbol, string>,
 };
 
-export const GLYPH: Record<Color, Record<PieceSymbol, string>> = { w: SOLID, b: SOLID };
+const NAMES: Record<PieceSymbol, string> = {
+  k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn',
+};
+
+export function pieceName(color: Color, type: PieceSymbol): string {
+  return `${color === 'w' ? 'white' : 'black'} ${NAMES[type]}`;
+}

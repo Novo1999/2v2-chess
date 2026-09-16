@@ -95,6 +95,27 @@ input[type='text'] {
 
 /* ---- board ---- */
 
+/* Themes set only colour variables, so every highlight below stays legible on
+   all of them. walnut is the default. */
+.board-theme-walnut {
+  --light: #f0d9b5;
+  --dark: #b58863;
+  --lastmove-light: #cdd26a;
+  --lastmove-dark: #aaa23a;
+}
+.board-theme-forest {
+  --light: #ebecd0;
+  --dark: #779556;
+  --lastmove-light: #f5f682;
+  --lastmove-dark: #b9ca43;
+}
+.board-theme-slate {
+  --light: #dee3e6;
+  --dark: #8ca2ad;
+  --lastmove-light: #c3d888;
+  --lastmove-dark: #92b166;
+}
+
 .board-wrap { position: relative; }
 
 .board {
@@ -105,20 +126,20 @@ input[type='text'] {
   grid-template-columns: repeat(8, minmax(0, 1fr));
   grid-template-rows: repeat(8, minmax(0, 1fr));
   aspect-ratio: 1;
-  /* Lets pieces size themselves against the board rather than the window. */
+  /* Lets coordinates size themselves against the board, not the window. */
   container-type: inline-size;
   width: 100%;
-  border-radius: 6px;
+  border-radius: 4px;
   overflow: hidden;
-  border: 1px solid var(--line);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.35);
   user-select: none;
+  -webkit-user-select: none;
 }
 
 .sq {
   position: relative;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -127,80 +148,77 @@ input[type='text'] {
 .sq.light { background: var(--light); }
 .sq.dark { background: var(--dark); }
 .sq.grabbable { cursor: pointer; }
-.sq.lastmove::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: rgba(255, 214, 92, 0.32);
-  pointer-events: none;
-}
-.sq.selected::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: rgba(110, 168, 254, 0.42);
-  pointer-events: none;
-}
+
+/* Last move repaints the square itself rather than laying a tint over it, so
+   the colour is exactly the theme's and never muddies the piece. */
+.sq.light.lastmove { background: var(--lastmove-light); }
+.sq.dark.lastmove { background: var(--lastmove-dark); }
+
+.sq.selected::after,
 .sq.check::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle, rgba(217, 83, 79, 0.85) 20%, transparent 72%);
   pointer-events: none;
 }
+.sq.selected::after { background: rgba(20, 85, 30, 0.5); }
+.sq.check::after {
+  background: radial-gradient(
+    ellipse at center,
+    rgba(255, 0, 0, 1) 0%,
+    rgba(231, 0, 0, 1) 25%,
+    rgba(169, 0, 0, 0) 89%,
+    rgba(158, 0, 0, 0) 100%
+  );
+}
 
-.sq .glyph {
+.piece {
   position: relative;
   z-index: 2;
-  /* A square is 12.5cqi; the piece fills about three quarters of it. */
-  font-size: 9.6cqi;
-  line-height: 1;
-  font-family: 'Segoe UI Symbol', 'Noto Sans Symbols 2', 'DejaVu Sans', serif;
-  font-variant-emoji: text;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  -webkit-user-drag: none;
 }
-/* Both armies use the solid glyphs and differ only by colour, so a white
-   bishop and a black bishop are the same shape — the outline glyphs for white
-   come from a different design in most fonts and never quite match. */
-.glyph-w {
-  color: #fafafa;
-  -webkit-text-stroke: 0.02em #1b1b1b;
-  text-shadow: 0 0.03em 0.06em rgba(0, 0, 0, 0.45);
-}
-.glyph-b {
-  color: #1b1b1b;
-  -webkit-text-stroke: 0.015em #1b1b1b;
-  text-shadow: 0 0.03em 0.05em rgba(0, 0, 0, 0.3);
-}
+.sq.grabbable:hover .piece { transform: translateY(-1px); }
 
+/* Legal destinations: a soft dot on an empty square, a corner-cut ring on a
+   capture — the ring leaves the target piece fully visible. */
 .sq.target::before {
   content: '';
   position: absolute;
-  width: 28%;
-  height: 28%;
+  width: 32%;
+  height: 32%;
   border-radius: 50%;
-  background: rgba(20, 22, 26, 0.35);
-  z-index: 1;
+  background: rgba(20, 85, 30, 0.5);
+  z-index: 3;
+  pointer-events: none;
 }
 .sq.capture::before {
   content: '';
   position: absolute;
-  inset: 6%;
-  border: 5px solid rgba(20, 22, 26, 0.35);
-  border-radius: 50%;
-  z-index: 1;
+  inset: 0;
+  background: radial-gradient(transparent 0%, transparent 79%, rgba(20, 85, 30, 0.35) 80%);
+  z-index: 3;
+  pointer-events: none;
 }
+/* Inset shadow, not background: a background would replace the square colour. */
+.sq.target:hover { box-shadow: inset 0 0 0 100vmax rgba(20, 85, 30, 0.3); }
 
 .coord {
   position: absolute;
-  z-index: 3;
-  font-size: max(9px, 1.5cqi);
+  z-index: 4;
+  font-size: max(9px, 1.6cqi);
   font-weight: 700;
-  opacity: 0.55;
-  color: #14161a;
   pointer-events: none;
+  line-height: 1;
 }
-.coord.rank { top: 2px; left: 3px; }
-.coord.file { bottom: 1px; right: 3px; }
+/* Each coordinate takes the other square colour, which is how it stays
+   readable on every theme without a colour of its own. */
+.sq.light .coord { color: var(--dark); }
+.sq.dark .coord { color: var(--light); }
+.coord.rank { top: 3px; left: 3px; }
+.coord.file { bottom: 2px; right: 3px; }
 
 /* ---- promotion picker ---- */
 
@@ -221,7 +239,9 @@ input[type='text'] {
 }
 .promo p { margin: 0 0 8px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.8px; }
 .promo-row { display: flex; gap: 6px; }
-.promo-row button { font-size: 30px; line-height: 1; padding: 6px 10px; }
+.promo-row button { padding: 4px; background: var(--light); border-color: var(--dark); }
+.promo-row button:hover:not(:disabled) { background: var(--lastmove-light); }
+.promo-row img { display: block; width: 56px; height: 56px; }
 
 /* ---- seats, trays, verdict ---- */
 
@@ -245,7 +265,9 @@ input[type='text'] {
 .you { color: #0b1220; background: var(--accent); border-color: var(--accent); }
 
 .tray { display: flex; align-items: center; gap: 6px; min-height: 20px; }
-.tray-pieces .glyph { font-size: 17px; margin-right: -5px; }
+.tray-pieces { display: flex; }
+.tray-piece { width: 22px; height: 22px; margin-right: -8px; }
+.tray-piece + .tray-piece { margin-left: 0; }
 .tray-lead { color: var(--muted); font-size: 12px; margin-left: 8px; }
 
 .verdict {
@@ -447,3 +469,21 @@ button.big { padding: 10px; }
   border-color: var(--accent);
   box-shadow: inset 3px 0 0 var(--accent);
 }
+
+/* ---- board theme picker ---- */
+
+.theme-picker { display: flex; align-items: center; gap: 7px; }
+.theme-picker .label { margin-right: auto; }
+.swatch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 34px;
+  height: 22px;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 5px;
+  border: 2px solid transparent;
+}
+.swatch.on { border-color: var(--accent); }
+.swatch-light { background: var(--light); }
+.swatch-dark { background: var(--dark); }

@@ -1,7 +1,7 @@
 import type { Color } from '../game/types';
 import type { CapturedTray as Tray } from '../game/derive';
 import { materialBalance } from '../game/derive';
-import { GLYPH } from './pieces';
+import { PIECE_IMG, pieceName } from './pieces';
 
 interface Props {
   tray: Tray;
@@ -19,9 +19,13 @@ export function CapturedTray({ tray, side }: Props) {
     <div className="tray">
       <span className="tray-pieces">
         {taken.map((piece, i) => (
-          <span key={i} className={`glyph glyph-${enemy}`}>
-            {GLYPH[enemy][piece]}
-          </span>
+          <img
+            key={i}
+            className="tray-piece"
+            src={PIECE_IMG[enemy][piece]}
+            alt={pieceName(enemy, piece)}
+            draggable={false}
+          />
         ))}
       </span>
       {lead > 0 && <span className="tray-lead">+{lead}</span>}
