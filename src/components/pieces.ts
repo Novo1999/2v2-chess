@@ -1,31 +1,46 @@
 import type { Color, PieceSymbol } from '../game/types';
+import type { PieceSetId } from '../appearance';
 
 /**
- * Piece artwork: the Chessnut set by Alexis Luengas, Apache 2.0 — see
- * src/assets/pieces/chessnut/README.md. Shared by the board, the captured tray
- * and the promotion picker so a bishop is the same drawing everywhere.
+ * Piece artwork, one folder per set, each with its own license and credit:
+ *
+ *   classic  src/assets/pieces/cburnett  Colin M.L. Burnett, BSD
+ *   neo      src/assets/pieces/chessnut  Alexis Luengas, Apache 2.0
+ *   wood     src/assets/pieces/wood      generated from cburnett, BSD
  */
-const files = import.meta.glob<string>('../assets/pieces/chessnut/*.svg', {
-  eager: true,
-  query: '?url',
-  import: 'default',
-});
+type Files = Record<string, string>;
 
-function file(name: string): string {
-  const url = files[`../assets/pieces/chessnut/${name}.svg`];
-  if (!url) throw new Error(`missing piece artwork: ${name}.svg`);
+// import.meta.glob needs a literal pattern and a literal options object in
+// every call, hence three spelled-out calls rather than a loop.
+const FOLDERS: Record<PieceSetId, { dir: string; files: Files }> = {
+  classic: {
+    dir: 'cburnett',
+    files: import.meta.glob<string>('../assets/pieces/cburnett/*.svg', { eager: true, query: '?url', import: 'default' }),
+  },
+  neo: {
+    dir: 'chessnut',
+    files: import.meta.glob<string>('../assets/pieces/chessnut/*.svg', { eager: true, query: '?url', import: 'default' }),
+  },
+  wood: {
+    dir: 'wood',
+    files: import.meta.glob<string>('../assets/pieces/wood/*.svg', { eager: true, query: '?url', import: 'default' }),
+  },
+};
+
+export function pieceUrl(set: PieceSetId, color: Color, type: PieceSymbol): string {
+  const { dir, files } = FOLDERS[set];
+  const url = files[`../assets/pieces/${dir}/${color}${type.toUpperCase()}.svg`];
+  if (!url) throw new Error(`missing piece artwork: ${dir}/${color}${type.toUpperCase()}.svg`);
   return url;
 }
 
-const TYPES: PieceSymbol[] = ['k', 'q', 'r', 'b', 'n', 'p'];
-
-export const PIECE_IMG: Record<Color, Record<PieceSymbol, string>> = {
-  w: Object.fromEntries(TYPES.map((t) => [t, file(`w${t.toUpperCase()}`)])) as Record<PieceSymbol, string>,
-  b: Object.fromEntries(TYPES.map((t) => [t, file(`b${t.toUpperCase()}`)])) as Record<PieceSymbol, string>,
-};
-
 const NAMES: Record<PieceSymbol, string> = {
-  k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn',
+  k: 'king',
+  q: 'queen',
+  r: 'rook',
+  b: 'bishop',
+  n: 'knight',
+  p: 'pawn',
 };
 
 export function pieceName(color: Color, type: PieceSymbol): string {

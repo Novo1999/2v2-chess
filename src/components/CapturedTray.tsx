@@ -1,15 +1,17 @@
 import type { Color } from '../game/types';
 import type { CapturedTray as Tray } from '../game/derive';
 import { materialBalance } from '../game/derive';
-import { PIECE_IMG, pieceName } from './pieces';
+import { pieceName, pieceUrl } from './pieces';
+import type { PieceSetId } from '../appearance';
 
 interface Props {
   tray: Tray;
   /** Which army's haul to show. Its pieces are the *opposing* colour. */
   side: Color;
+  pieceSet: PieceSetId;
 }
 
-export function CapturedTray({ tray, side }: Props) {
+export function CapturedTray({ tray, side, pieceSet }: Props) {
   const taken = tray[side];
   const enemy: Color = side === 'w' ? 'b' : 'w';
   const balance = materialBalance(tray);
@@ -22,7 +24,7 @@ export function CapturedTray({ tray, side }: Props) {
           <img
             key={i}
             className="tray-piece"
-            src={PIECE_IMG[enemy][piece]}
+            src={pieceUrl(pieceSet, enemy, piece)}
             alt={pieceName(enemy, piece)}
             draggable={false}
           />

@@ -3,6 +3,7 @@ import { getDb, isConfigured } from './net/firebase';
 import { createGame, isValidCode, normalizeCode } from './net/rooms';
 import { DEFAULT_CLOCK_MS } from './net/writes';
 import type { SeatCount } from './net/schema';
+import { AppearancePicker } from './components/AppearancePicker';
 
 interface Props {
   name: string;
@@ -52,6 +53,7 @@ export function Home({ name, onName, onOpen, onHotSeat }: Props) {
         </p>
       </section>
 
+      <div className="home-column">
       <section className="card">
         <h2>Play online</h2>
         {!isConfigured && (
@@ -122,6 +124,13 @@ export function Home({ name, onName, onOpen, onHotSeat }: Props) {
         </button>
         {error && <p className="reject">{error}</p>}
       </section>
+
+      <section className="card">
+        <h2>Board &amp; pieces</h2>
+        <AppearancePicker />
+        <p className="hint">Saved in this browser. Change it any time, in a game too.</p>
+      </section>
+      </div>
 
       <section className="card">
         <h2>Join a room</h2>

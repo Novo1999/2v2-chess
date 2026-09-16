@@ -7,6 +7,8 @@ import { Board } from './Board';
 import { CapturedTray } from './CapturedTray';
 import { MoveList } from './MoveList';
 import { isMuted, playMoveSound, setMuted } from '../sound';
+import { useAppearance } from '../appearance';
+import { AppearancePicker } from './AppearancePicker';
 
 interface Props {
   state: GameState;
@@ -58,10 +60,10 @@ export function GameView({
       }
     : null;
 
-  const [theme, setTheme] = useBoardTheme();
+  const appearance = useAppearance();
 
   return (
-    <div className={`game board-theme-${theme}`}>
+    <div className={`game board-theme-${appearance.board}`}>
       <div className="game-main">
         {banner}
         <div className="side-strip">
@@ -71,7 +73,7 @@ export function GameView({
             you={you}
             names={names}
           />
-          <CapturedTray tray={tray} side={flip(orientation)} />
+          <CapturedTray tray={tray} side={flip(orientation)} pieceSet={appearance.pieces} />
         </div>
 
         <Board
@@ -80,6 +82,7 @@ export function GameView({
           movable={yours ? SLOT_COLOR[toMove] : null}
           lastMove={last}
           checkSquare={checkSquare}
+          pieceSet={appearance.pieces}
           mate={mate}
           overlay={<ResultCard state={state} you={you} names={names} />}
           onMove={onMove}
@@ -92,7 +95,7 @@ export function GameView({
             you={you}
             names={names}
           />
-          <CapturedTray tray={tray} side={orientation} />
+          <CapturedTray tray={tray} side={orientation} pieceSet={appearance.pieces} />
         </div>
       </div>
 
@@ -102,7 +105,7 @@ export function GameView({
         {aside}
         <MoveList moves={state.moves} />
         <div className="actions">
-          <ThemePicker theme={theme} onTheme={setTheme} />
+          <AppearancePicker compact />
           <SoundToggle />
           {actions}
         </div>
@@ -239,63 +242,6 @@ function ResultCard({
         <div className="result-score">{state.result === '1/2-1/2' ? '½-½' : state.result}</div>
         <button onClick={() => setDismissed(endKey)}>View board</button>
       </div>
-    </div>
-  );
-}
-
-const BOARD_THEMES = ['walnut', 'forest', 'slate'] as const;
-type BoardTheme = (typeof BOARD_THEMES)[number];
-const THEME_KEY = 'consultation-chess:board-theme';
-
-function useBoardTheme(): [BoardTheme, (theme: BoardTheme) => void] {
-  const [theme, setTheme] = useState<BoardTheme>(() => {
-    try {
-      const saved = localStorage.getItem(THEME_KEY);
-      return (BOARD_THEMES as readonly string[]).includes(saved ?? '')
-        ? (saved as BoardTheme)
-        : 'walnut';
-    } catch {
-      return 'walnut';
-    }
-  });
-  return [
-    theme,
-    (next) => {
-      setTheme(next);
-      try {
-        localStorage.setItem(THEME_KEY, next);
-      } catch {
-        /* the choice just will not persist */
-      }
-    },
-  ];
-}
-
-/** Board colours are a personal preference, so each player picks their own. */
-function ThemePicker({
-  theme,
-  onTheme,
-}: {
-  theme: BoardTheme;
-  onTheme: (theme: BoardTheme) => void;
-}) {
-  return (
-    <div className="theme-picker" role="radiogroup" aria-label="Board colours">
-      <span className="label">Board</span>
-      {BOARD_THEMES.map((name) => (
-        <button
-          key={name}
-          role="radio"
-          aria-checked={theme === name}
-          aria-label={name}
-          title={name}
-          className={`swatch board-theme-${name} ${theme === name ? 'on' : ''}`}
-          onClick={() => onTheme(name)}
-        >
-          <span className="swatch-light" />
-          <span className="swatch-dark" />
-        </button>
-      ))}
     </div>
   );
 }

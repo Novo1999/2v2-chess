@@ -19,7 +19,9 @@
     "pretest:rules": "node scripts/free-port.mjs 9000 9099",
     "preemulator": "node scripts/free-port.mjs 9000 9099",
     "deploy": "npm run build && firebase deploy --only database,hosting",
-    "deploy:rules": "node rules/build.mjs && firebase deploy --only database"
+    "deploy:rules": "node rules/build.mjs && firebase deploy --only database",
+    "pieces:wood": "node scripts/build-wood-pieces.mjs",
+    "board:grain": "node scripts/build-board-grain.mjs"
   },
   "dependencies": {
     "chess.js": "^1.0.0",

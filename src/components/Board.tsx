@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import type { Color, MoveIntent, PieceSymbol } from '../game/types';
 import { boardOf, isPromotion, legalTargets, pieceAt } from '../game/rules';
-import { PIECE_IMG, pieceName } from './pieces';
+import { pieceName, pieceUrl } from './pieces';
+import type { PieceSetId } from '../appearance';
 import {
   ArrowLayer,
   MARK_COLOR,
@@ -32,6 +33,7 @@ interface Props {
   lastMove: { from: string; to: string } | null;
   /** Square of a king in check, painted red. */
   checkSquare: string | null;
+  pieceSet: PieceSetId;
   /** After a checkmate: the mated king's square and the winning king's. */
   mate?: { loser: string; winner: string } | null;
   /** Drawn over the board — the result card when the game is over. */
@@ -65,6 +67,7 @@ export function Board({
   movable,
   lastMove,
   checkSquare,
+  pieceSet,
   mate = null,
   overlay,
   onMove,
@@ -281,6 +284,7 @@ export function Board({
                 key={square}
                 className={classes}
                 data-square={square}
+                style={grainOffset(file, rank)}
                 role="gridcell"
                 aria-label={square}
               >
@@ -290,7 +294,7 @@ export function Board({
                 {piece && (
                   <img
                     className="piece"
-                    src={PIECE_IMG[piece.color][piece.type]}
+                    src={pieceUrl(pieceSet, piece.color, piece.type)}
                     alt={pieceName(piece.color, piece.type)}
                     draggable={false}
                   />
@@ -318,7 +322,7 @@ export function Board({
       {dragged && drag && (
         <img
           className="drag-piece"
-          src={PIECE_IMG[dragged.color][dragged.type]}
+          src={pieceUrl(pieceSet, dragged.color, dragged.type)}
           alt=""
           draggable={false}
           style={{ left: drag.x, top: drag.y }}
@@ -342,7 +346,7 @@ export function Board({
                     setSelected(null);
                   }}
                 >
-                  <img src={PIECE_IMG[movable ?? 'w'][type]} alt="" draggable={false} />
+                  <img src={pieceUrl(pieceSet, movable ?? 'w', type)} alt="" draggable={false} />
                 </button>
               ))}
             </div>
@@ -351,6 +355,17 @@ export function Board({
       )}
     </div>
   );
+}
+
+/**
+ * Which patch of the wood-grain texture a square shows. Scrambled from the
+ * square's identity, not its screen position, so neighbours never continue one
+ * another's grain and flipping the board keeps each square's own look.
+ */
+function grainOffset(file: string, rank: string): Record<string, number> {
+  const f = FILES.indexOf(file as never);
+  const r = Number(rank) - 1;
+  return { '--gx': (f * 3 + r) % 8, '--gy': (r * 5 + f * 2) % 8 };
 }
 
 function Crown() {

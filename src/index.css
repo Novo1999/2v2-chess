@@ -95,25 +95,24 @@ input[type='text'] {
 
 /* ---- board ---- */
 
-/* Themes set only colour variables, so every highlight below stays legible on
-   all of them. walnut is the default. */
-.board-theme-walnut {
+/* Board themes set variables only, so every highlight below reads on all of
+   them. Classic is flat; the woods layer a grain texture over the colour. */
+:root,
+.board-theme-classic {
   --light: #f0d9b5;
   --dark: #b58863;
-  --lastmove-light: #cdd26a;
-  --lastmove-dark: #aaa23a;
+  --grain: none;
+  --lastmove: rgba(155, 199, 0, 0.41);
 }
-.board-theme-forest {
-  --light: #ebecd0;
-  --dark: #779556;
-  --lastmove-light: #f5f682;
-  --lastmove-dark: #b9ca43;
+.board-theme-dark-wood {
+  --light: #dab47e;
+  --dark: #925e30;
+  --lastmove: rgba(255, 234, 60, 0.4);
 }
-.board-theme-slate {
-  --light: #dee3e6;
-  --dark: #8ca2ad;
-  --lastmove-light: #c3d888;
-  --lastmove-dark: #92b166;
+.board-theme-walnut {
+  --light: #cdb08a;
+  --dark: #7d5637;
+  --lastmove: rgba(255, 234, 60, 0.36);
 }
 
 .board-wrap { position: relative; }
@@ -145,17 +144,29 @@ input[type='text'] {
   justify-content: center;
   cursor: default;
 }
-.sq.light { background: var(--light); }
-.sq.dark { background: var(--dark); }
+/* Tiles are the board's squares and the picker's little previews alike. */
+.sq,
+.tile {
+  background-image: var(--grain);
+  background-size: 800% 800%;
+  background-position: calc(var(--gx, 0) * 100% / 7) calc(var(--gy, 0) * 100% / 7);
+}
+.sq.light,
+.tile.light { background-color: var(--light); }
+.sq.dark,
+.tile.dark { background-color: var(--dark); }
 .sq.grabbable { cursor: grab; }
 /* The board owns every touch gesture, so dragging a piece never scrolls the page. */
 .board { touch-action: none; }
 .board.dragging, .board.dragging .sq { cursor: grabbing; }
 
-/* Last move repaints the square itself rather than laying a tint over it, so
-   the colour is exactly the theme's and never muddies the piece. */
-.sq.light.lastmove { background: var(--lastmove-light); }
-.sq.dark.lastmove { background: var(--lastmove-dark); }
+/* Last move is a tint layered over the square — over the grain too, on the
+   wood boards, which a flat recolour would have wiped out. */
+.sq.lastmove {
+  background-image: linear-gradient(var(--lastmove), var(--lastmove)), var(--grain);
+  background-size: 100% 100%, 800% 800%;
+  background-position: 0 0, calc(var(--gx, 0) * 100% / 7) calc(var(--gy, 0) * 100% / 7);
+}
 
 .sq.selected::after,
 .sq.check::after {
@@ -243,7 +254,7 @@ input[type='text'] {
 .promo p { margin: 0 0 8px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.8px; }
 .promo-row { display: flex; gap: 6px; }
 .promo-row button { padding: 4px; background: var(--light); border-color: var(--dark); }
-.promo-row button:hover:not(:disabled) { background: var(--lastmove-light); }
+.promo-row button:hover:not(:disabled) { background: var(--light); filter: brightness(1.08); }
 .promo-row img { display: block; width: 56px; height: 56px; }
 
 /* ---- seats, trays, verdict ---- */
@@ -473,23 +484,45 @@ button.big { padding: 10px; }
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
-/* ---- board theme picker ---- */
+/* ---- board & piece picker ---- */
 
-.theme-picker { display: flex; align-items: center; gap: 7px; }
-.theme-picker .label { margin-right: auto; }
-.swatch {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  width: 34px;
-  height: 22px;
-  padding: 0;
-  overflow: hidden;
-  border-radius: 5px;
-  border: 2px solid transparent;
+.home-column { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+.appearance { display: flex; flex-direction: column; gap: 12px; }
+.appearance.compact { gap: 8px; }
+.choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.choice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 7px;
+  border: 2px solid var(--line);
+  border-radius: 9px;
+  background: #161a20;
 }
-.swatch.on { border-color: var(--accent); }
-.swatch-light { background: var(--light); }
-.swatch-dark { background: var(--dark); }
+.choice.on { border-color: var(--accent); background: rgba(110, 168, 254, 0.12); }
+.choice-label { font-size: 12px; font-weight: 600; }
+.compact .choice { padding: 4px; gap: 3px; border-radius: 7px; }
+.compact .choice-label { font-size: 11px; }
+
+.board-preview,
+.pieces-preview {
+  display: grid;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+.board-preview { grid-template-columns: 1fr 1fr; aspect-ratio: 1; max-width: 64px; }
+.pieces-preview { grid-template-columns: 1fr 1fr; aspect-ratio: 2 / 1; max-width: 96px; }
+/* A preview tile stands in for a whole square, so it shows a whole square's
+   worth of grain rather than a sliver of the board-sized texture. */
+.board-preview .tile,
+.pieces-preview .tile { background-size: 800% 800%; }
+.pieces-preview img { display: block; width: 100%; height: 100%; }
+.compact .board-preview { max-width: 40px; }
+.compact .pieces-preview { max-width: 64px; }
 
 /* ---- game over ---- */
 
