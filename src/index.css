@@ -59,8 +59,21 @@ input[type='text'] {
 
 /* ---- layout ---- */
 
-.game { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 24px; align-items: start; }
-.game-main { min-width: 0; }
+.game {
+  display: grid;
+  /* The board column stops growing at the same cap as .game-main, and the
+     pair centres, so the panel sits beside the board instead of across a gap. */
+  grid-template-columns: minmax(0, max(300px, calc(100svh - 150px))) 280px;
+  justify-content: center;
+  gap: 24px;
+  align-items: start;
+}
+.game-main {
+  min-width: 0;
+  /* The board is square, so its width is also its height: cap it by the
+     viewport height too, or a laptop screen scrolls your own back rank away. */
+  max-width: max(300px, calc(100svh - 150px));
+}
 
 .panel {
   background: var(--panel);
@@ -86,8 +99,14 @@ input[type='text'] {
 
 .board {
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
+  /* Both axes, and minmax(0, ...) on both: a plain 1fr track still grows to fit
+     its content, which is what made the rows holding pieces taller than the
+     empty ones. With a zero minimum every track is exactly an eighth. */
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-rows: repeat(8, minmax(0, 1fr));
   aspect-ratio: 1;
+  /* Lets pieces size themselves against the board rather than the window. */
+  container-type: inline-size;
   width: 100%;
   border-radius: 6px;
   overflow: hidden;
@@ -97,6 +116,9 @@ input[type='text'] {
 
 .sq {
   position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -130,11 +152,25 @@ input[type='text'] {
 .sq .glyph {
   position: relative;
   z-index: 2;
-  font-size: min(6.4vw, 46px);
+  /* A square is 12.5cqi; the piece fills about three quarters of it. */
+  font-size: 9.6cqi;
   line-height: 1;
+  font-family: 'Segoe UI Symbol', 'Noto Sans Symbols 2', 'DejaVu Sans', serif;
+  font-variant-emoji: text;
 }
-.glyph-w { color: #fff; text-shadow: 0 0 2px #000, 0 1px 2px rgba(0, 0, 0, 0.6); }
-.glyph-b { color: #1a1a1a; text-shadow: 0 0 2px rgba(255, 255, 255, 0.35); }
+/* Both armies use the solid glyphs and differ only by colour, so a white
+   bishop and a black bishop are the same shape — the outline glyphs for white
+   come from a different design in most fonts and never quite match. */
+.glyph-w {
+  color: #fafafa;
+  -webkit-text-stroke: 0.02em #1b1b1b;
+  text-shadow: 0 0.03em 0.06em rgba(0, 0, 0, 0.45);
+}
+.glyph-b {
+  color: #1b1b1b;
+  -webkit-text-stroke: 0.015em #1b1b1b;
+  text-shadow: 0 0.03em 0.05em rgba(0, 0, 0, 0.3);
+}
 
 .sq.target::before {
   content: '';
@@ -157,7 +193,7 @@ input[type='text'] {
 .coord {
   position: absolute;
   z-index: 3;
-  font-size: 9px;
+  font-size: max(9px, 1.5cqi);
   font-weight: 700;
   opacity: 0.55;
   color: #14161a;
@@ -273,7 +309,6 @@ input[type='text'] {
 
 @media (max-width: 860px) {
   .game { grid-template-columns: minmax(0, 1fr); }
-  .sq .glyph { font-size: min(10vw, 46px); }
 }
 
 /* ---- home, lobby, rooms ---- */

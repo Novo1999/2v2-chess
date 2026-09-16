@@ -5,6 +5,7 @@
 
 import { get, ref, set } from 'firebase/database';
 import type { Database } from 'firebase/database';
+import { signIn } from './firebase';
 import type { SeatCount } from './schema';
 import { DEFAULT_CLOCK_MS, newGameNode } from './writes';
 
@@ -36,6 +37,9 @@ export async function createGame(
   seats: SeatCount,
   clockMs: number = DEFAULT_CLOCK_MS,
 ): Promise<string> {
+  // The availability check below is a read, and rules deny reads to anyone
+  // signed out. The home screen has no identity of its own, so take one here.
+  await signIn();
   for (let attempt = 0; attempt < 5; attempt++) {
     const code = randomCode();
     const snap = await get(ref(db, `games/${code}/status`));
@@ -47,6 +51,7 @@ export async function createGame(
 }
 
 export async function gameExists(db: Database, code: string): Promise<boolean> {
+  await signIn();
   const snap = await get(ref(db, `games/${code}/status`));
   return snap.exists();
 }

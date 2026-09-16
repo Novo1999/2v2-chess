@@ -8,7 +8,6 @@ import {
   connectAuthEmulator,
   getAuth,
   signInAnonymously,
-  onAuthStateChanged,
   type Auth,
 } from 'firebase/auth';
 import {
@@ -92,19 +91,29 @@ export function getAuthClient(): Auth {
  * is precisely the admission that this identity does not survive a new browser,
  * which is why the slot secret exists.
  */
+let signingIn: Promise<string> | null = null;
+
+/**
+ * Idempotent and shared: every caller that is about to touch the database awaits
+ * this first, and they all get the same uid. Rules refuse everything to a
+ * signed-out client, so a code path that forgets to sign in does not degrade —
+ * it fails with a bare "Permission denied".
+ */
 export function signIn(): Promise<string> {
-  const client = getAuthClient();
-  return new Promise((resolve, reject) => {
-    const stop = onAuthStateChanged(
-      client,
-      (user) => {
-        if (user) {
-          stop();
-          resolve(user.uid);
-        }
-      },
-      reject,
-    );
-    signInAnonymously(client).catch(reject);
-  });
+  if (!signingIn) {
+    const client = getAuthClient();
+    signingIn = client
+      .authStateReady()
+      .then(async () => {
+        // A persisted anonymous user from an earlier visit is reused rather
+        // than replaced, so a refresh keeps the same uid and the same seat.
+        const user = client.currentUser ?? (await signInAnonymously(client)).user;
+        return user.uid;
+      })
+      .catch((err: unknown) => {
+        signingIn = null; // let the next attempt try again
+        throw err;
+      });
+  }
+  return signingIn;
 }
