@@ -41,11 +41,15 @@ export interface MoveRecord {
 }
 
 export type GameStatus =
+  /** Seats are still being claimed; no move may be played yet. */
+  | 'lobby'
   | 'active'
   | 'checkmate'
   | 'stalemate'
   | 'draw'
-  | 'resigned';
+  | 'resigned'
+  /** A team's shared clock ran out. */
+  | 'timeout';
 
 export type Result = '1-0' | '0-1' | '1/2-1/2';
 

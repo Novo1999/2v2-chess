@@ -1,0 +1,168 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "games": {
+      "$gid": {
+        ".read": "auth != null",
+        ".write": "auth != null && !data.exists() && newData.exists()",
+        ".validate": "newData.hasChildren(['fen','turnIndex','toMove','rotation','status','seats','clocks'])",
+        "turnIndex": {
+          ".write": "auth != null && root.child('games').child($gid).child('status').val() === 'active' && (root.child('games').child($gid).child('players').child(root.child('games').child($gid).child('toMove').val()).child('uid').val() === auth.uid || ((root.child('games').child($gid).child('players').child(root.child('games').child($gid).child('toMove').val()).child('connected').val() === false && now - root.child('games').child($gid).child('players').child(root.child('games').child($gid).child('toMove').val()).child('lastSeen').val() > 25000) && root.child('games').child($gid).child('players').child(root.child('games').child($gid).child('rotation').child(root.child('games').child($gid).child('rotation').child(root.child('games').child($gid).child('toMove').val()).val()).val()).child('uid').val() === auth.uid)) && newData.val() === data.val() + 1",
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "toMove": {
+          ".write": "auth != null && newData.parent().child('turnIndex').val() === data.parent().child('turnIndex').val() + 1",
+          ".validate": "(newData.val() === 'P1' || newData.val() === 'P2' || newData.val() === 'P3' || newData.val() === 'P4') && (!data.exists() || newData.val() === root.child('games').child($gid).child('rotation').child(data.val()).val())"
+        },
+        "fen": {
+          ".write": "auth != null && newData.parent().child('turnIndex').val() === data.parent().child('turnIndex').val() + 1",
+          ".validate": "newData.isString() && newData.val().length > 10 && newData.val().length < 120"
+        },
+        "lastMoveAt": {
+          ".write": "auth != null && (newData.parent().child('turnIndex').val() === data.parent().child('turnIndex').val() + 1 || (root.child('games').child($gid).child('status').val() === 'lobby' && newData.parent().child('status').val() === 'active'))",
+          ".validate": "newData.val() === now"
+        },
+        "clocks": {
+          "w": {
+            ".write": "auth != null && newData.parent().parent().child('turnIndex').val() === data.parent().parent().child('turnIndex').val() + 1",
+            ".validate": "newData.isNumber() && newData.val() >= 0 && (!data.exists() || ((root.child('games').child($gid).child('toMove').val() === 'P1' || root.child('games').child($gid).child('toMove').val() === 'P2') ? (newData.val() <= data.val() - (now - root.child('games').child($gid).child('lastMoveAt').val()) + 3000 && newData.val() >= data.val() - (now - root.child('games').child($gid).child('lastMoveAt').val()) - 3000) : newData.val() === data.val()))"
+          },
+          "b": {
+            ".write": "auth != null && newData.parent().parent().child('turnIndex').val() === data.parent().parent().child('turnIndex').val() + 1",
+            ".validate": "newData.isNumber() && newData.val() >= 0 && (!data.exists() || (!(root.child('games').child($gid).child('toMove').val() === 'P1' || root.child('games').child($gid).child('toMove').val() === 'P2') ? (newData.val() <= data.val() - (now - root.child('games').child($gid).child('lastMoveAt').val()) + 3000 && newData.val() >= data.val() - (now - root.child('games').child($gid).child('lastMoveAt').val()) - 3000) : newData.val() === data.val()))"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "status": {
+          ".write": "auth != null && (root.child('games').child($gid).child('players').child('P1').child('uid').val() === auth.uid || root.child('games').child($gid).child('players').child('P2').child('uid').val() === auth.uid || root.child('games').child($gid).child('players').child('P3').child('uid').val() === auth.uid || root.child('games').child($gid).child('players').child('P4').child('uid').val() === auth.uid) && ((root.child('games').child($gid).child('status').val() === 'lobby' && newData.val() === 'active' && root.child('games').child($gid).child('players').child('P1').child('uid').exists() && root.child('games').child($gid).child('players').child('P3').child('uid').exists() && (root.child('games').child($gid).child('seats').val() === 2 || (root.child('games').child($gid).child('players').child('P2').child('uid').exists() && root.child('games').child($gid).child('players').child('P4').child('uid').exists()))) || (root.child('games').child($gid).child('status').val() === 'active' && newData.parent().child('turnIndex').val() === data.parent().child('turnIndex').val() + 1 && (newData.val() === 'active' || newData.val() === 'checkmate' || newData.val() === 'stalemate' || newData.val() === 'draw')) || (root.child('games').child($gid).child('status').val() === 'active' && newData.val() === 'timeout' && (now - root.child('games').child($gid).child('lastMoveAt').val()) >= root.child('games').child($gid).child('clocks').child((root.child('games').child($gid).child('toMove').val() === 'P1' || root.child('games').child($gid).child('toMove').val() === 'P2') ? 'w' : 'b').val()) || (root.child('games').child($gid).child('status').val() === 'active' && newData.val() === 'resigned' && (root.child('games').child($gid).child('offer').child('kind').val() === 'resign' && ((root.child('games').child($gid).child('offer').child('army').val() === 'w' && (root.child('games').child($gid).child('offer').child('accept').child('P1').val() === true && (root.child('games').child($gid).child('seats').val() === 2 || root.child('games').child($gid).child('offer').child('accept').child('P2').val() === true))) || (root.child('games').child($gid).child('offer').child('army').val() === 'b' && (root.child('games').child($gid).child('offer').child('accept').child('P3').val() === true && (root.child('games').child($gid).child('seats').val() === 2 || root.child('games').child($gid).child('offer').child('accept').child('P4').val() === true)))))) || (root.child('games').child($gid).child('status').val() === 'active' && newData.val() === 'draw' && (root.child('games').child($gid).child('offer').child('kind').val() === 'draw' && (root.child('games').child($gid).child('offer').child('accept').child('P1').val() === true && (root.child('games').child($gid).child('seats').val() === 2 || root.child('games').child($gid).child('offer').child('accept').child('P2').val() === true)) && (root.child('games').child($gid).child('offer').child('accept').child('P3').val() === true && (root.child('games').child($gid).child('seats').val() === 2 || root.child('games').child($gid).child('offer').child('accept').child('P4').val() === true)))))",
+          ".validate": "newData.val() === 'lobby' || newData.val() === 'active' || newData.val() === 'checkmate' || newData.val() === 'stalemate' || newData.val() === 'draw' || newData.val() === 'resigned' || newData.val() === 'timeout'"
+        },
+        "result": {
+          ".write": "auth != null && (root.child('games').child($gid).child('players').child('P1').child('uid').val() === auth.uid || root.child('games').child($gid).child('players').child('P2').child('uid').val() === auth.uid || root.child('games').child($gid).child('players').child('P3').child('uid').val() === auth.uid || root.child('games').child($gid).child('players').child('P4').child('uid').val() === auth.uid) && (newData.parent().child('turnIndex').val() === data.parent().child('turnIndex').val() + 1 || newData.parent().child('status').val() !== root.child('games').child($gid).child('status').val())",
+          ".validate": "(newData.val() === '1-0' || newData.val() === '0-1' || newData.val() === '1/2-1/2') && (newData.parent().child('status').val() !== 'resigned' || newData.val() === (root.child('games').child($gid).child('offer').child('army').val() === 'w' ? '0-1' : '1-0'))"
+        },
+        "moves": {
+          "$pushId": {
+            ".write": "auth != null && !data.exists() && newData.parent().parent().child('turnIndex').val() === data.parent().parent().child('turnIndex').val() + 1",
+            ".validate": "newData.hasChildren(['index','san','from','to','by','fenAfter','ts']) && newData.child('index').val() === root.child('games').child($gid).child('turnIndex').val() && newData.child('by').val() === root.child('games').child($gid).child('toMove').val() && newData.child('fenAfter').val() === newData.parent().parent().child('fen').val()",
+            "index": {
+              ".validate": "newData.isNumber()"
+            },
+            "san": {
+              ".validate": "newData.isString() && newData.val().length <= 10"
+            },
+            "from": {
+              ".validate": "newData.isString() && newData.val().length === 2"
+            },
+            "to": {
+              ".validate": "newData.isString() && newData.val().length === 2"
+            },
+            "by": {
+              ".validate": "newData.val() === 'P1' || newData.val() === 'P2' || newData.val() === 'P3' || newData.val() === 'P4'"
+            },
+            "fenAfter": {
+              ".validate": "newData.isString()"
+            },
+            "captured": {
+              ".validate": "newData.isString() && newData.val().length === 1"
+            },
+            "ts": {
+              ".validate": "newData.val() === now"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "players": {
+          "$slot": {
+            ".write": "auth != null && newData.child('uid').val() === auth.uid && ((!root.child('games').child($gid).child('players').child($slot).child('uid').exists() && !root.child('secrets').child($gid).child($slot).exists()) || root.child('games').child($gid).child('players').child($slot).child('uid').val() === auth.uid || (root.child('secrets').child($gid).child($slot).exists() && root.child('proof').child($gid).child(auth.uid).child($slot).val() === root.child('secrets').child($gid).child($slot).val()))",
+            ".validate": "newData.hasChildren(['uid','connected','lastSeen'])",
+            "uid": {
+              ".validate": "newData.val() === auth.uid"
+            },
+            "name": {
+              ".validate": "newData.isString() && newData.val().length <= 24"
+            },
+            "connected": {
+              ".write": "auth != null && root.child('games').child($gid).child('players').child($slot).child('uid').val() === auth.uid",
+              ".validate": "newData.isBoolean()"
+            },
+            "lastSeen": {
+              ".write": "auth != null && root.child('games').child($gid).child('players').child($slot).child('uid').val() === auth.uid",
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "offer": {
+          "kind": {
+            ".write": "auth != null && (root.child('games').child($gid).child('players').child('P1').child('uid').val() === auth.uid || root.child('games').child($gid).child('players').child('P2').child('uid').val() === auth.uid || root.child('games').child($gid).child('players').child('P3').child('uid').val() === auth.uid || root.child('games').child($gid).child('players').child('P4').child('uid').val() === auth.uid) && root.child('games').child($gid).child('status').val() === 'active'",
+            ".validate": "newData.val() === 'resign' || newData.val() === 'draw'"
+          },
+          "army": {
+            ".write": "auth != null && (root.child('games').child($gid).child('players').child('P1').child('uid').val() === auth.uid || root.child('games').child($gid).child('players').child('P2').child('uid').val() === auth.uid || root.child('games').child($gid).child('players').child('P3').child('uid').val() === auth.uid || root.child('games').child($gid).child('players').child('P4').child('uid').val() === auth.uid) && root.child('games').child($gid).child('status').val() === 'active'",
+            ".validate": "newData.val() === 'w' || newData.val() === 'b'"
+          },
+          "by": {
+            ".write": "auth != null && (root.child('games').child($gid).child('players').child('P1').child('uid').val() === auth.uid || root.child('games').child($gid).child('players').child('P2').child('uid').val() === auth.uid || root.child('games').child($gid).child('players').child('P3').child('uid').val() === auth.uid || root.child('games').child($gid).child('players').child('P4').child('uid').val() === auth.uid) && root.child('games').child($gid).child('status').val() === 'active'",
+            ".validate": "newData.val() === 'P1' || newData.val() === 'P2' || newData.val() === 'P3' || newData.val() === 'P4'"
+          },
+          "at": {
+            ".write": "auth != null && (root.child('games').child($gid).child('players').child('P1').child('uid').val() === auth.uid || root.child('games').child($gid).child('players').child('P2').child('uid').val() === auth.uid || root.child('games').child($gid).child('players').child('P3').child('uid').val() === auth.uid || root.child('games').child($gid).child('players').child('P4').child('uid').val() === auth.uid) && root.child('games').child($gid).child('status').val() === 'active'",
+            ".validate": "newData.val() === now"
+          },
+          "accept": {
+            "$slot": {
+              ".write": "auth != null && (root.child('games').child($gid).child('players').child('P1').child('uid').val() === auth.uid || root.child('games').child($gid).child('players').child('P2').child('uid').val() === auth.uid || root.child('games').child($gid).child('players').child('P3').child('uid').val() === auth.uid || root.child('games').child($gid).child('players').child('P4').child('uid').val() === auth.uid) && (!newData.exists() || (root.child('games').child($gid).child('players').child($slot).child('uid').val() === auth.uid && newData.val() === true))",
+              ".validate": "newData.isBoolean()"
+            }
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "rotation": {
+          "$slot": {
+            ".validate": "newData.val() === 'P1' || newData.val() === 'P2' || newData.val() === 'P3' || newData.val() === 'P4'"
+          }
+        },
+        "seats": {
+          ".validate": "newData.val() === 2 || newData.val() === 4"
+        },
+        "initialClock": {
+          ".validate": "newData.isNumber() && newData.val() > 0"
+        },
+        "createdAt": {
+          ".validate": "newData.val() === now"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "secrets": {
+      "$gid": {
+        "$slot": {
+          ".write": "auth != null && !data.exists() && root.child('games').child($gid).child('players').child($slot).child('uid').val() === auth.uid",
+          ".validate": "newData.isString() && newData.val().length >= 20"
+        }
+      }
+    },
+    "proof": {
+      "$gid": {
+        "$uid": {
+          "$slot": {
+            ".write": "auth != null && auth.uid === $uid",
+            ".validate": "newData.isString() && newData.val().length >= 20"
+          }
+        }
+      }
+    }
+  }
+}

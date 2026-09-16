@@ -1,11 +1,7 @@
-import type { Color, PieceSymbol } from '../game/types';
+import type { Color } from '../game/types';
 import type { CapturedTray as Tray } from '../game/derive';
 import { materialBalance } from '../game/derive';
-
-const GLYPH: Record<Color, Record<PieceSymbol, string>> = {
-  w: { k: '♔', q: '♕', r: '♖', b: '♗', n: '♘', p: '♙' },
-  b: { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' },
-};
+import { GLYPH } from './pieces';
 
 interface Props {
   tray: Tray;

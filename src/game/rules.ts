@@ -194,3 +194,33 @@ export function kingSquare(fen: string, color: 'w' | 'b'): string | null {
   }
   return null;
 }
+
+export interface BoardSquare {
+  square: string;
+  type: PieceSymbol;
+  color: 'w' | 'b';
+}
+
+/**
+ * The position as an 8x8 grid, rank 8 first. Keeps chess.js confined to this
+ * module — components render from this, never from a Chess instance.
+ */
+export function boardOf(fen: string): (BoardSquare | null)[][] {
+  return new Chess(fen).board() as (BoardSquare | null)[][];
+}
+
+export function pieceAt(fen: string, square: string): BoardSquare | null {
+  const piece = new Chess(fen).get(square as never);
+  return piece ? { square, type: piece.type, color: piece.color } : null;
+}
+
+/**
+ * Whether this move needs a promotion choice. Asked before the move is made,
+ * so the picker can open instead of silently queening.
+ */
+export function isPromotion(fen: string, from: string, to: string): boolean {
+  const piece = pieceAt(fen, from);
+  if (!piece || piece.type !== 'p') return false;
+  const rank = to[1];
+  return piece.color === 'w' ? rank === '8' : rank === '1';
+}

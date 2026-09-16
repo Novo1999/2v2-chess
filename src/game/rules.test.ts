@@ -131,7 +131,9 @@ describe('the move log', () => {
     const capture = state.moves.find((m) => m.captured !== null)!;
     expect(capture.san).toBe('Qxf7#');
     expect(capture.captured).toBe('p');
-    expect(capture.by).toBe('P1');
+    // The mate lands on half-move 7, and 6 % 4 is index 2 of the rotation, so
+    // P2 delivers it with the queen P1 developed. That split is the whole game.
+    expect(capture.by).toBe('P2');
   });
 });
 
@@ -149,8 +151,9 @@ describe('outcomes', () => {
   });
 
   it('detects stalemate as a draw distinct from other draws', () => {
-    const state = createGame(TURN_ORDER_2, '7k/5Q2/6K1/8/8/8/8/8 w - - 0 1');
-    const after = play(state, [['f7', 'g7']]);
+    // Kg6 already covers g7 and h7; Qc4 takes g8 without giving check.
+    const state = createGame(TURN_ORDER_2, '7k/8/6K1/8/8/8/8/5Q2 w - - 0 1');
+    const after = play(state, [['f1', 'c4']]);
     expect(after.status).toBe('stalemate');
     expect(after.result).toBe('1/2-1/2');
   });
