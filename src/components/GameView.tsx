@@ -86,6 +86,7 @@ export function GameView({
 
       <aside className="panel">
         <Verdict state={state} yours={yours} inCheck={inCheck} names={names} />
+        <PlayerList state={state} you={you} names={names} />
         {aside}
         <MoveList moves={state.moves} />
         <div className="actions">
@@ -112,6 +113,42 @@ function useMoveSounds(moves: readonly MoveRecord[]) {
     if (before === null || moves.length <= before) return;
     playMoveSound(moves[moves.length - 1]?.captured ? 'capture' : 'move');
   }, [moves]);
+}
+
+/**
+ * Every seat, in the order they move. The highlight walks down the list turn by
+ * turn, which makes the rotation itself visible — in consultation chess "whose
+ * move is it" means which of four people, not which of two colours.
+ */
+function PlayerList({
+  state,
+  you,
+  names,
+}: {
+  state: GameState;
+  you: Slot | null;
+  names: Partial<Record<Slot, string>>;
+}) {
+  const toMove = state.status === 'active' ? slotToMove(state) : null;
+  return (
+    <ol className="players" aria-label="Players in turn order">
+      {state.turnOrder.map((slot) => {
+        const army = SLOT_COLOR[slot];
+        return (
+          <li
+            key={slot}
+            className={`player-row player-${army} ${slot === toMove ? 'to-move' : ''}`}
+            aria-current={slot === toMove ? 'true' : undefined}
+          >
+            <span className={`pip pip-${army}`} />
+            <span className="player-name">{names[slot] ?? slot}</span>
+            {names[slot] && <span className="slottag">{slot}</span>}
+            {slot === you && <span className="you">you</span>}
+          </li>
+        );
+      })}
+    </ol>
+  );
 }
 
 function SoundToggle() {

@@ -63,13 +63,14 @@ describe('the board', () => {
     const user = userEvent.setup();
     render(<LocalGame />);
 
-    expect(screen.getByText('P1')).toBeTruthy();
+    const onTurn = () => document.querySelector('.side-strip .seat.on-turn')?.textContent;
+
+    expect(onTurn()).toContain('P1');
     await user.click(screen.getByLabelText('e2'));
     await user.click(screen.getByLabelText('e4'));
 
     // Four seats: white's P1 is followed by black's P3, not by white's P2.
-    expect(screen.getByText('P3')).toBeTruthy();
-    expect(screen.queryByText('P2')).toBeNull();
+    expect(onTurn()).toContain('P3');
   });
 });
 
@@ -113,5 +114,24 @@ describe('move sounds', () => {
     render(<LocalGame />);
     await play(user, 'e2', 'e5');
     expect(playMoveSound).not.toHaveBeenCalled();
+  });
+});
+
+describe('the player list', () => {
+  const current = () =>
+    document.querySelector('.player-row.to-move')?.textContent;
+
+  it('lists every seat in turn order and highlights the one to move', async () => {
+    const user = userEvent.setup();
+    render(<LocalGame />);
+
+    const rows = [...document.querySelectorAll('.player-row')].map((r) => r.textContent);
+    expect(rows).toEqual(['P1', 'P3', 'P2', 'P4']);
+    expect(current()).toBe('P1');
+
+    await user.click(screen.getByLabelText('e2'));
+    await user.click(screen.getByLabelText('e4'));
+    expect(current()).toBe('P3');
+    expect(document.querySelectorAll('.player-row.to-move')).toHaveLength(1);
   });
 });

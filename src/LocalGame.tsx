@@ -45,12 +45,6 @@ export function LocalGame({ onExit }: { onExit?: () => void }) {
           </p>
         )
       }
-      aside={
-        <div className="rotation">
-          <span className="label">Rotation</span>
-          <code>{seats.join(' → ')}</code>
-        </div>
-      }
       actions={
         <>
           <label className="toggle">
