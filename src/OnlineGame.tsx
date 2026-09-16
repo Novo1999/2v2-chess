@@ -149,6 +149,7 @@ export function OnlineGame({ gameId, uid, name, onName, onLeave }: Props) {
         controls={canMove ? [live.toMove] : []}
         you={mySlot}
         names={namesOf(live)}
+        presence={presenceOf(live, mySlot, online)}
         orientation={orientation}
         onMove={onMove}
         banner={
@@ -165,12 +166,14 @@ export function OnlineGame({ gameId, uid, name, onName, onLeave }: Props) {
                 ms={clockNow(live, 'b', now)}
                 army="b"
                 running={live.status === 'active' && SLOT_COLOR[live.toMove] === 'b'}
+                flagged={flaggedArmy(live) === 'b'}
                 sharedBy={armyLabel(live, 'b')}
               />
               <Clock
                 ms={clockNow(live, 'w', now)}
                 army="w"
                 running={live.status === 'active' && SLOT_COLOR[live.toMove] === 'w'}
+                flagged={flaggedArmy(live) === 'w'}
                 sharedBy={armyLabel(live, 'w')}
               />
             </div>
@@ -223,6 +226,31 @@ function namesOf(game: NetGame): Partial<Record<Slot, string>> {
     if (name) names[slot] = name;
   }
   return names;
+}
+
+/**
+ * Who is still attached. The database only learns of a dropped connection when
+ * the server notices it, but this browser knows its own state at once — so your
+ * own seat reads from the socket, everyone else's from their presence node.
+ */
+export function presenceOf(
+  game: NetGame,
+  mySlot: Slot | null,
+  online: boolean,
+): Partial<Record<Slot, boolean>> {
+  const presence: Partial<Record<Slot, boolean>> = {};
+  for (const slot of seatsOf(game)) {
+    const player = game.players?.[slot];
+    if (!player?.uid) continue;
+    presence[slot] = slot === mySlot ? online : player.connected !== false;
+  }
+  return presence;
+}
+
+/** The army whose clock ran out, once the flag has been called. */
+function flaggedArmy(game: NetGame): 'w' | 'b' | null {
+  if (game.status !== 'timeout') return null;
+  return game.result === '1-0' ? 'b' : game.result === '0-1' ? 'w' : null;
 }
 
 /** An offer plus the offerer's own signature, in one update. */

@@ -34,11 +34,19 @@ interface Props {
   /** Square of a king in check, painted red. */
   checkSquare: string | null;
   pieceSet: PieceSetId;
-  /** After a checkmate: the mated king's square and the winning king's. */
-  mate?: { loser: string; winner: string } | null;
+  /** After a checkmate or a flag fall: the losing king's square and the winner's. */
+  ending?: Ending | null;
+  /** Showing an earlier position from the move list, not the live one. */
+  browsing?: boolean;
   /** Drawn over the board — the result card when the game is over. */
   overlay?: ReactNode;
   onMove: (intent: MoveIntent) => void;
+}
+
+export interface Ending {
+  kind: 'checkmate' | 'timeout';
+  loser: string;
+  winner: string;
 }
 
 interface Drag {
@@ -68,7 +76,8 @@ export function Board({
   lastMove,
   checkSquare,
   pieceSet,
-  mate = null,
+  ending = null,
+  browsing = false,
   overlay,
   onMove,
 }: Props) {
@@ -245,7 +254,7 @@ export function Board({
   const dragged = drag?.started ? pieceAt(fen, drag.from) : null;
 
   return (
-    <div className="board-wrap">
+    <div className={`board-wrap ${browsing ? 'browsing' : ''}`}>
       <div
         ref={boardRef}
         className={`board board-${orientation} ${drag?.started ? 'dragging' : ''}`}
@@ -270,8 +279,8 @@ export function Board({
                 (lastMove.from === square || lastMove.to === square) &&
                 'lastmove',
               checkSquare === square && 'check',
-              mate?.loser === square && 'mated',
-              mate?.winner === square && 'victor',
+              ending?.loser === square && (ending.kind === 'checkmate' ? 'mated' : 'flagged'),
+              ending?.winner === square && 'victor',
               movable && piece?.color === movable && 'grabbable',
               drag?.started && drag.from === square && 'drag-origin',
               dragOver === square && isTarget && 'drag-over',
@@ -299,12 +308,17 @@ export function Board({
                     draggable={false}
                   />
                 )}
-                {mate?.loser === square && (
-                  <span className="king-badge badge-mated" title="Checkmated">
-                    #
-                  </span>
-                )}
-                {mate?.winner === square && (
+                {ending?.loser === square &&
+                  (ending.kind === 'checkmate' ? (
+                    <span className="king-badge badge-mated" title="Checkmated">
+                      #
+                    </span>
+                  ) : (
+                    <span className="king-badge badge-flagged" title="Out of time">
+                      <Hourglass />
+                    </span>
+                  ))}
+                {ending?.winner === square && (
                   <span className="king-badge badge-victor" title="Winner">
                     <Crown />
                   </span>
@@ -366,6 +380,17 @@ function grainOffset(file: string, rank: string): Record<string, number> {
   const f = FILES.indexOf(file as never);
   const r = Number(rank) - 1;
   return { '--gx': (f * 3 + r) % 8, '--gy': (r * 5 + f * 2) % 8 };
+}
+
+export function Hourglass() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M6 2h12v2h-1v3.2a5 5 0 0 1-2.4 4.3L13.9 12l.7.5A5 5 0 0 1 17 16.8V20h1v2H6v-2h1v-3.2a5 5 0 0 1 2.4-4.3l.7-.5-.7-.5A5 5 0 0 1 7 7.2V4H6zm3 2v3.2c0 1 .5 1.9 1.3 2.5L12 11l1.7-1.3A3 3 0 0 0 15 7.2V4zm3 9-1.7 1.3A3 3 0 0 0 9 16.8V20h6v-3.2a3 3 0 0 0-1.3-2.5z"
+      />
+    </svg>
+  );
 }
 
 function Crown() {

@@ -14,7 +14,7 @@
  * the client is not allowed to read.
  */
 
-import { onDisconnect, ref, serverTimestamp, set, update } from 'firebase/database';
+import { onDisconnect, onValue, ref, serverTimestamp, set, update } from 'firebase/database';
 import type { Database } from 'firebase/database';
 import type { Slot } from '../game/types';
 import { claimSeatNode } from './writes';
@@ -98,6 +98,11 @@ export async function reclaimSeat(
 /**
  * Presence. `onDisconnect` is registered with the server, so it fires even when
  * the tab is closed mid-move — which is the case the grace period exists for.
+ *
+ * A server-side disconnect handler fires once and is then spent, and a dropped
+ * connection that comes back is a new session to the server. So both halves
+ * are redone on every (re)connect, or a player whose Wi-Fi blinked would stay
+ * marked as gone for the rest of the game.
  */
 export function trackPresence(
   db: Database,
@@ -106,11 +111,20 @@ export function trackPresence(
 ): () => void {
   const node = ref(db, `games/${gameId}/players/${slot}`);
   const away = onDisconnect(node);
-  void away.update({ connected: false, lastSeen: serverTimestamp() });
-  void update(node, { connected: true, lastSeen: serverTimestamp() });
+
+  const stop = onValue(ref(db, '.info/connected'), (snap) => {
+    if (snap.val() !== true) return;
+    void away
+      .update({ connected: false, lastSeen: serverTimestamp() })
+      .then(() => update(node, { connected: true, lastSeen: serverTimestamp() }))
+      .catch(() => {
+        /* the seat was lost meanwhile; nothing of ours to mark */
+      });
+  });
 
   return () => {
+    stop();
     void away.cancel();
-    void update(node, { connected: false, lastSeen: serverTimestamp() });
+    void update(node, { connected: false, lastSeen: serverTimestamp() }).catch(() => {});
   };
 }

@@ -47,7 +47,7 @@ input[type='text'] {
 
 .topbar {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
   border-bottom: 1px solid var(--line);
   padding-bottom: 12px;
@@ -372,6 +372,10 @@ input[type='text'] {
 button.big { padding: 10px; }
 
 .topbar h1 a { color: inherit; text-decoration: none; }
+.brand { display: inline-flex; align-items: center; gap: 9px; }
+.brand-logo { display: block; width: 30px; height: 30px; filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.4)); }
+.home-button { display: inline-flex; align-items: center; gap: 6px; }
+.home-button svg { width: 16px; height: 16px; }
 
 .roomcode { display: flex; align-items: center; gap: 10px; }
 .roomcode code {
@@ -644,3 +648,120 @@ button.big { padding: 10px; }
   z-index: 6;
   pointer-events: none;
 }
+
+/* ---- history ---- */
+
+.history { display: flex; flex-direction: column; gap: 6px; }
+.movelist button.half {
+  width: 100%;
+  padding: 1px 5px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+.movelist button.half:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); }
+.movelist button.half[aria-current='true'] { background: rgba(110, 168, 254, 0.28); color: #fff; }
+.movelist li:has(button.half[aria-current='true']) .movenum { color: var(--text); }
+
+.history-nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+.history-nav button { display: grid; place-items: center; padding: 5px 0; }
+.history-nav svg { width: 18px; height: 18px; }
+.history-nav .back-to-live:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0b1220;
+  animation: live-nudge 1.6s ease-in-out infinite;
+}
+@keyframes live-nudge {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(110, 168, 254, 0.5); }
+  50% { box-shadow: 0 0 0 4px rgba(110, 168, 254, 0); }
+}
+/* An old position must never pass for the live one. */
+.board-wrap.browsing .board { box-shadow: 0 0 0 3px #f59e0b; }
+.board-wrap.browsing::after {
+  content: 'Viewing an earlier move';
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.92);
+  color: #1a1204;
+  font-size: 12px;
+  font-weight: 700;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ---- time out ---- */
+
+@keyframes clock-critical {
+  0%, 100% { background: #11141a; }
+  50% { background: #3a1616; }
+}
+.clock.critical { border-color: #ef4444; animation: clock-critical 1s ease-in-out infinite; }
+.clock.critical .clock-time { color: #fca5a5; }
+.clock.flagged {
+  border-color: #ef4444;
+  background: linear-gradient(90deg, rgba(220, 38, 38, 0.35), rgba(220, 38, 38, 0.12));
+  animation: badge-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.clock.flagged .clock-time { color: #fecaca; }
+.clock-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #fecaca;
+}
+.flag-icon { width: 14px; height: 14px; }
+
+@keyframes flagged-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 100vmax rgba(245, 158, 11, 0.45); }
+  50% { box-shadow: inset 0 0 0 100vmax rgba(245, 158, 11, 0.75); }
+}
+.sq.flagged { animation: flagged-pulse 1.2s ease-in-out infinite; }
+.badge-flagged { background: #d97706; }
+.badge-flagged svg { width: 68%; height: 68%; }
+.result-timeout .result-title { color: #fbbf24; }
+.result-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
+  animation: hourglass-tip 1.4s ease-in-out 1.1s 2 both;
+}
+.result-icon svg { width: 28px; height: 28px; }
+@keyframes hourglass-tip {
+  0%, 40% { transform: rotate(0); }
+  60%, 100% { transform: rotate(180deg); }
+}
+
+/* ---- presence ---- */
+
+.presence { display: inline-grid; place-items: center; flex: none; margin-left: auto; }
+.presence-on {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+}
+.presence-off { color: #f87171; }
+.presence-off svg { width: 16px; height: 16px; }
+.player-row .you + .presence,
+.player-row .slottag + .presence { margin-left: 6px; }
+.player-row.offline .player-name { text-decoration: line-through; text-decoration-color: rgba(248, 113, 113, 0.6); }
+.player-row.offline { border-style: dashed; border-color: rgba(248, 113, 113, 0.45); }
+.seat .presence { margin-left: 0; }
+.occupant .presence { margin-left: 2px; }

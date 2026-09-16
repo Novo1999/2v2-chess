@@ -42,13 +42,23 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <h1>
-          <a href="#" onClick={() => go('')}>
+          <a href="#" className="brand" onClick={() => go('')}>
+            <img className="brand-logo" src="/favicon.svg" alt="" width={30} height={30} />
             Chesspacito
           </a>
         </h1>
         <span className="sub">
           {route.at === 'local' ? 'hot seat' : route.at === 'game' ? route.id : '2v2'}
         </span>
+        <span className="spacer" />
+        {route.at !== 'home' && (
+          <button className="home-button" onClick={() => go('')}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path fill="currentColor" d="M12 3 2 11.5h3V21h5.5v-6h3v6H19v-9.5h3z" />
+            </svg>
+            Home
+          </button>
+        )}
       </header>
 
       {route.at === 'home' && (

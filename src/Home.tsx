@@ -49,7 +49,7 @@ export function Home({ name, onName, onOpen, onHotSeat }: Props) {
           />
         </label>
         <p className="hint">
-          Shown to the other players. Needed to create or join a room.
+          Shown to the other players, and remembered on this device.
         </p>
       </section>
 

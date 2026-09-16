@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Color, GameState, MoveIntent, MoveRecord, Slot } from '../game/types';
 import { SLOT_COLOR } from '../game/types';
-import { colorToMove, isCheck, kingSquare, slotToMove } from '../game/rules';
+import { START_FEN, colorToMove, isCheck, kingSquare, slotToMove } from '../game/rules';
 import { capturedTray, toPgn } from '../game/derive';
-import { Board } from './Board';
+import { Board, Hourglass, type Ending } from './Board';
 import { CapturedTray } from './CapturedTray';
-import { MoveList } from './MoveList';
-import { isMuted, playMoveSound, setMuted } from '../sound';
+import { HistoryNav, MoveList } from './MoveList';
+import { PresenceIcon } from './Presence';
+import { isMuted, playMoveSound, setMuted, type MoveSound } from '../sound';
 import { useAppearance } from '../appearance';
 import { AppearancePicker } from './AppearancePicker';
 
@@ -22,6 +23,11 @@ interface Props {
   you?: Slot | null;
   /** Display names by seat. Seats without one show their slot label. */
   names?: Partial<Record<Slot, string>>;
+  /**
+   * Whether each seat's player is connected, for networked games. Left out in
+   * hot seat, where everyone is at the same keyboard by definition.
+   */
+  presence?: Partial<Record<Slot, boolean>>;
   orientation: Color;
   onMove: (intent: MoveIntent) => void;
   /** Transport-specific panels: clocks, seats, connection, offers. */
@@ -35,6 +41,7 @@ export function GameView({
   controls,
   you = null,
   names = {},
+  presence,
   orientation,
   onMove,
   aside,
@@ -44,21 +51,19 @@ export function GameView({
   const toMove = slotToMove(state);
   const active = state.status === 'active';
   const yours = active && controls.includes(toMove);
-  const tray = capturedTray(state.moves);
-  const last = state.moves[state.moves.length - 1] ?? null;
-
   const inCheck = isCheck(state.fen);
-  const checkSquare = inCheck ? kingSquare(state.fen, colorToMove(state)) : null;
 
   useMoveSounds(state.moves);
+  const { shown, browsing, show } = useHistory(state.moves, yours);
 
-  const mated = state.status === 'checkmate' ? colorToMove(state) : null;
-  const mate = mated
-    ? {
-        loser: kingSquare(state.fen, mated) ?? '',
-        winner: kingSquare(state.fen, flip(mated)) ?? '',
-      }
-    : null;
+  // Everything drawn on and around the board follows the position being shown;
+  // the panel — whose turn, the clocks, the result — stays on the live game.
+  const moves = state.moves.slice(0, shown);
+  const fen = browsing ? (moves[shown - 1]?.fenAfter ?? START_FEN) : state.fen;
+  const tray = capturedTray(moves);
+  const last = moves[moves.length - 1] ?? null;
+  const checkSquare = isCheck(fen) ? kingSquare(fen, fen.split(' ')[1] as Color) : null;
+  const ending = browsing ? null : endingOf(state);
 
   const appearance = useAppearance();
 
@@ -72,19 +77,21 @@ export function GameView({
             state={state}
             you={you}
             names={names}
+            presence={presence}
           />
           <CapturedTray tray={tray} side={flip(orientation)} pieceSet={appearance.pieces} />
         </div>
 
         <Board
-          fen={state.fen}
+          fen={fen}
           orientation={orientation}
-          movable={yours ? SLOT_COLOR[toMove] : null}
+          movable={yours && !browsing ? SLOT_COLOR[toMove] : null}
           lastMove={last}
           checkSquare={checkSquare}
           pieceSet={appearance.pieces}
-          mate={mate}
-          overlay={<ResultCard state={state} you={you} names={names} />}
+          ending={ending}
+          browsing={browsing}
+          overlay={<ResultCard state={state} you={you} names={names} hidden={browsing} />}
           onMove={onMove}
         />
 
@@ -94,6 +101,7 @@ export function GameView({
             state={state}
             you={you}
             names={names}
+            presence={presence}
           />
           <CapturedTray tray={tray} side={orientation} pieceSet={appearance.pieces} />
         </div>
@@ -101,9 +109,12 @@ export function GameView({
 
       <aside className="panel">
         <Verdict state={state} yours={yours} inCheck={inCheck} names={names} />
-        <PlayerList state={state} you={you} names={names} />
+        <PlayerList state={state} you={you} names={names} presence={presence} />
         {aside}
-        <MoveList moves={state.moves} />
+        <div className="history">
+          <MoveList moves={state.moves} shown={shown} onShow={show} />
+          <HistoryNav total={state.moves.length} shown={shown} onShow={show} />
+        </div>
         <div className="actions">
           <AppearancePicker compact />
           <SoundToggle />
@@ -127,8 +138,79 @@ function useMoveSounds(moves: readonly MoveRecord[]) {
     const before = seen.current;
     seen.current = moves.length;
     if (before === null || moves.length <= before) return;
-    playMoveSound(moves[moves.length - 1]?.captured ? 'capture' : 'move');
+    playMoveSound(soundFor(moves[moves.length - 1]!));
   }, [moves]);
+}
+
+/** A check outranks a capture: it is the one the players need to notice. */
+function soundFor(move: MoveRecord): MoveSound {
+  if (/[+#]/.test(move.san)) return 'check';
+  return move.captured ? 'capture' : 'move';
+}
+
+/**
+ * Stepping back through the game. `shown` is how many moves in the board is,
+ * and the full length means live. The cursor is only held while it points into
+ * the past, so stepping forward onto the last move rejoins the live game and
+ * later moves keep arriving on the board.
+ */
+function useHistory(moves: readonly MoveRecord[], yours: boolean) {
+  const total = moves.length;
+  const [cursor, setCursor] = useState<number | null>(null);
+  const shown = cursor === null ? total : Math.min(cursor, total);
+  const browsing = shown < total;
+
+  // A new game starts live, and so does your turn: the shared clock is running,
+  // and a board you cannot move on is no place to discover that.
+  const before = useRef(total);
+  useEffect(() => {
+    const previous = before.current;
+    before.current = total;
+    if (total < previous || (total > previous && yours)) setCursor(null);
+  }, [total, yours]);
+
+  const show = (ply: number) => {
+    const next = Math.max(0, Math.min(ply, total));
+    if (next === shown) return;
+    setCursor(next >= total ? null : next);
+    const move = moves[next - 1];
+    if (move) playMoveSound(soundFor(move));
+  };
+
+  // The arrow keys step too, as on every chess site — unless someone is typing.
+  const step = useRef((delta: number) => show(shown + delta));
+  step.current = (delta: number) => show(shown + delta);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      const target = e.target as Element | null;
+      if (target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+      e.preventDefault();
+      step.current(e.key === 'ArrowLeft' ? -1 : 1);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  return { shown, browsing, show };
+}
+
+/** The kings to mark once the game is decided on the board or on the clock. */
+function endingOf(state: GameState): Ending | null {
+  let loser: Color;
+  if (state.status === 'checkmate') {
+    loser = colorToMove(state);
+  } else if (state.status === 'timeout' && (state.result === '1-0' || state.result === '0-1')) {
+    loser = state.result === '1-0' ? 'b' : 'w';
+  } else {
+    return null;
+  }
+  return {
+    kind: state.status,
+    loser: kingSquare(state.fen, loser) ?? '',
+    winner: kingSquare(state.fen, flip(loser)) ?? '',
+  };
 }
 
 /**
@@ -140,26 +222,30 @@ function PlayerList({
   state,
   you,
   names,
+  presence,
 }: {
   state: GameState;
   you: Slot | null;
   names: Partial<Record<Slot, string>>;
+  presence?: Partial<Record<Slot, boolean>>;
 }) {
   const toMove = state.status === 'active' ? slotToMove(state) : null;
   return (
     <ol className="players" aria-label="Players in turn order">
       {state.turnOrder.map((slot) => {
         const army = SLOT_COLOR[slot];
+        const connected = presence?.[slot];
         return (
           <li
             key={slot}
-            className={`player-row player-${army} ${slot === toMove ? 'to-move' : ''}`}
+            className={`player-row player-${army} ${slot === toMove ? 'to-move' : ''} ${connected === false ? 'offline' : ''}`}
             aria-current={slot === toMove ? 'true' : undefined}
           >
             <span className={`pip pip-${army}`} />
             <span className="player-name">{names[slot] ?? slot}</span>
             {names[slot] && <span className="slottag">{slot}</span>}
             {slot === you && <span className="you">you</span>}
+            {connected !== undefined && <PresenceIcon connected={connected} />}
           </li>
         );
       })}
@@ -184,15 +270,18 @@ function ResultCard({
   state,
   you,
   names,
+  hidden,
 }: {
   state: GameState;
   you: Slot | null;
   names: Partial<Record<Slot, string>>;
+  /** Kept mounted while browsing, so a card put away stays put away. */
+  hidden: boolean;
 }) {
   const over = state.status !== 'active' && state.status !== 'lobby';
   const endKey = `${state.status}:${state.moves.length}:${state.result}`;
   const [dismissed, setDismissed] = useState<string | null>(null);
-  if (!over || !state.result || dismissed === endKey) return null;
+  if (hidden || !over || !state.result || dismissed === endKey) return null;
 
   const winner: Color | null =
     state.result === '1-0' ? 'w' : state.result === '0-1' ? 'b' : null;
@@ -211,7 +300,7 @@ function ResultCard({
       : state.status === 'resigned' && loser
         ? `${team(loser)} resigned`
         : state.status === 'timeout' && loser
-          ? `${team(loser)} ran out of time`
+          ? `${team(loser)} ran out of time on ${names[slotToMove(state)] ?? slotToMove(state)}'s move`
           : state.status === 'stalemate'
             ? 'No legal moves, and no check'
             : 'The game is drawn';
@@ -225,6 +314,11 @@ function ResultCard({
         {personal && (
           <div className="result-personal">
             {personal === 'won' ? 'You won' : personal === 'lost' ? 'You lost' : 'Draw'}
+          </div>
+        )}
+        {state.status === 'timeout' && (
+          <div className="result-icon">
+            <Hourglass />
           </div>
         )}
         <div className="result-title">{ENDINGS[state.status] ?? 'Game over'}</div>
@@ -283,11 +377,13 @@ function SeatBadge({
   state,
   you,
   names,
+  presence,
 }: {
   slot: Slot | Color;
   state: GameState;
   you: Slot | null;
   names: Partial<Record<Slot, string>>;
+  presence?: Partial<Record<Slot, boolean>>;
 }) {
   const isSeat = slot === 'P1' || slot === 'P2' || slot === 'P3' || slot === 'P4';
   const onTurn = isSeat && slot === slotToMove(state) && state.status === 'active';
@@ -309,6 +405,7 @@ function SeatBadge({
       {label}
       {isSeat && names[slot] && <span className="slottag">{slot}</span>}
       {isSeat && slot === you && <span className="you">you</span>}
+      {isSeat && presence?.[slot] === false && <PresenceIcon connected={false} />}
       {onTurn && <span className="tomove">to move</span>}
     </span>
   );
@@ -331,7 +428,7 @@ function Verdict({
       stalemate: 'Stalemate',
       draw: 'Draw',
       resigned: 'Resignation',
-      timeout: 'Flag fell',
+      timeout: 'Out of time',
       lobby: 'Not started',
     };
     return (

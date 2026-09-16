@@ -1,17 +1,19 @@
 /**
- * Move and capture sounds.
+ * Move, capture and check sounds.
  *
  * Synthesised with Web Audio instead of shipped as recordings: the familiar
  * board sounds from the big chess sites are their own non-free assets, so this
  * builds a wooden knock from scratch — a sliver of band-passed noise for the
  * click of wood on wood, and a short falling tone for the hollow body of the
- * board. Nothing to license, nothing to download, and it plays instantly.
+ * board. A check adds a bright two-note ping over the knock, so it is heard as
+ * a warning without looking. Nothing to license, nothing to download, and it
+ * plays instantly.
  *
- * To use recordings instead, put `move.mp3` and `capture.mp3` in
+ * To use recordings instead, put `move.mp3`, `capture.mp3` and `check.mp3` in
  * `public/sounds/`. They are picked up automatically when present.
  */
 
-export type MoveSound = 'move' | 'capture';
+export type MoveSound = 'move' | 'capture' | 'check';
 
 const MUTE_KEY = 'consultation-chess:muted';
 
@@ -23,11 +25,22 @@ interface Voice {
   body: number;
   gain: number;
   decay: number;
+  /** A pitched ping over the knock, one note per partial, rising. */
+  ping?: { partials: number[]; gain: number; decay: number };
 }
 
 const VOICES: Record<MoveSound, Voice> = {
   move: { taps: [0], band: 1500, q: 1.4, body: 150, gain: 0.55, decay: 0.055 },
   capture: { taps: [0, 0.03], band: 2300, q: 1.1, body: 185, gain: 0.8, decay: 0.07 },
+  check: {
+    taps: [0],
+    band: 1900,
+    q: 1.3,
+    body: 170,
+    gain: 0.65,
+    decay: 0.06,
+    ping: { partials: [1175, 1760], gain: 0.16, decay: 0.32 },
+  },
 };
 
 const noiseByContext = new WeakMap<BaseAudioContext, AudioBuffer>();
@@ -90,6 +103,18 @@ export function scheduleKnock(
     body.start(t);
     body.stop(t + voice.decay * 1.4 + 0.01);
   });
+
+  voice.ping?.partials.forEach((freq, i) => {
+    const { gain, decay } = voice.ping!;
+    // Each note a beat after the last: a quick rising "ding-ding".
+    const t = at + 0.012 + i * 0.07;
+    const tone = ac.createOscillator();
+    tone.type = 'triangle';
+    tone.frequency.value = freq;
+    tone.connect(envelope(ac, t, gain, decay)).connect(out);
+    tone.start(t);
+    tone.stop(t + decay + 0.01);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -136,6 +161,7 @@ export function unlockAudioOnFirstGesture(): void {
     void ac.resume();
     void loadRecording(ac, 'move');
     void loadRecording(ac, 'capture');
+    void loadRecording(ac, 'check');
   };
   window.addEventListener('pointerdown', unlock);
   window.addEventListener('keydown', unlock);

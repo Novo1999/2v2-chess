@@ -2,6 +2,7 @@ import type { Slot } from '../game/types';
 import { SLOT_COLOR } from '../game/types';
 import type { NetGame } from '../net/schema';
 import { allSeatsFilled, seatsOf } from '../net/schema';
+import { PresenceIcon } from './Presence';
 
 interface Props {
   gameId: string;
@@ -80,6 +81,7 @@ export function Lobby({
                       <span className="occupant">
                         {player.name ?? 'Player'}
                         {isMine && <span className="you">you</span>}
+                        <PresenceIcon connected={player.connected !== false} />
                       </span>
                     ) : (
                       <button
