@@ -35,6 +35,22 @@ export function Home({ name, onName, onOpen, onHotSeat }: Props) {
 
   return (
     <div className="home">
+      <section className="card name-card">
+        <label className="field">
+          <span className="label">Your name</span>
+          <input
+            type="text"
+            value={name}
+            maxLength={24}
+            placeholder="who are you"
+            onChange={(e) => onName(e.target.value)}
+          />
+        </label>
+        <p className="hint">
+          Shown to the other players. Needed to create or join a room.
+        </p>
+      </section>
+
       <section className="card">
         <h2>Play online</h2>
         {!isConfigured && (
@@ -57,17 +73,6 @@ export function Home({ name, onName, onOpen, onHotSeat }: Props) {
             </p>
           </div>
         )}
-
-        <label className="field">
-          <span className="label">Your name</span>
-          <input
-            type="text"
-            value={name}
-            maxLength={24}
-            placeholder="who are you"
-            onChange={(e) => onName(e.target.value)}
-          />
-        </label>
 
         <div className="field">
           <span className="label">Table</span>

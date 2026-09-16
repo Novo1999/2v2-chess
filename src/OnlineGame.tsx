@@ -36,10 +36,11 @@ interface Props {
   gameId: string;
   uid: string;
   name: string;
+  onName: (name: string) => void;
   onLeave: () => void;
 }
 
-export function OnlineGame({ gameId, uid, name, onLeave }: Props) {
+export function OnlineGame({ gameId, uid, name, onName, onLeave }: Props) {
   const loaded = useGame(gameId);
   const serverNow = useServerNow();
   const online = useConnected();
@@ -119,11 +120,13 @@ export function OnlineGame({ gameId, uid, name, onLeave }: Props) {
           gameId={gameId}
           game={live}
           mySlot={mySlot}
+          name={name}
+          onName={onName}
           busy={busy}
           onClaim={(slot) => {
             setBusy(true);
             setError(null);
-            claimSeat(getDb(), gameId, slot, uid, name)
+            claimSeat(getDb(), gameId, slot, uid, name.trim())
               .catch((err: Error) => setError(err.message))
               .finally(() => setBusy(false));
           }}
@@ -145,6 +148,7 @@ export function OnlineGame({ gameId, uid, name, onLeave }: Props) {
         state={toGameState(live)}
         controls={canMove ? [live.toMove] : []}
         you={mySlot}
+        names={namesOf(live)}
         orientation={orientation}
         onMove={onMove}
         banner={
@@ -210,6 +214,15 @@ export function OnlineGame({ gameId, uid, name, onLeave }: Props) {
       />
     </>
   );
+}
+
+function namesOf(game: NetGame): Partial<Record<Slot, string>> {
+  const names: Partial<Record<Slot, string>> = {};
+  for (const slot of seatsOf(game)) {
+    const name = game.players?.[slot]?.name;
+    if (name) names[slot] = name;
+  }
+  return names;
 }
 
 /** An offer plus the offerer's own signature, in one update. */
@@ -278,7 +291,8 @@ function useReclaimSeat(
     if (attempted.current === key) return;
     attempted.current = key;
 
-    reclaimSeat(getDb(), gameId, ticket, uid, name).catch((err: Error) => {
+    const keepName = name.trim() || game.players?.[ticket.slot]?.name;
+    reclaimSeat(getDb(), gameId, ticket, uid, keepName).catch((err: Error) => {
       // The seat was given away, or the ticket is stale. Either way it is no
       // longer ours, and holding on to it would only retry forever.
       forgetSeat(gameId);

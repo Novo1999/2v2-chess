@@ -6,8 +6,15 @@
 
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LocalGame } from '../LocalGame';
+import { playMoveSound } from '../sound';
+
+vi.mock('../sound', () => ({
+  playMoveSound: vi.fn(),
+  isMuted: () => false,
+  setMuted: vi.fn(),
+}));
 
 function squares(container: HTMLElement, selector: string) {
   return Array.from(container.querySelectorAll(selector));
@@ -63,5 +70,48 @@ describe('the board', () => {
     // Four seats: white's P1 is followed by black's P3, not by white's P2.
     expect(screen.getByText('P3')).toBeTruthy();
     expect(screen.queryByText('P2')).toBeNull();
+  });
+});
+
+describe('move sounds', () => {
+  beforeEach(() => vi.mocked(playMoveSound).mockClear());
+
+  async function play(user: ReturnType<typeof userEvent.setup>, from: string, to: string) {
+    await user.click(screen.getByLabelText(from));
+    await user.click(screen.getByLabelText(to));
+  }
+
+  it('stays silent when a game is first shown', () => {
+    render(<LocalGame />);
+    expect(playMoveSound).not.toHaveBeenCalled();
+  });
+
+  it('plays the move sound for a quiet move', async () => {
+    const user = userEvent.setup();
+    render(<LocalGame />);
+    await play(user, 'e2', 'e4');
+    expect(playMoveSound).toHaveBeenCalledTimes(1);
+    expect(playMoveSound).toHaveBeenLastCalledWith('move');
+  });
+
+  it('plays the capture sound when a piece is taken', async () => {
+    const user = userEvent.setup();
+    render(<LocalGame />);
+    await play(user, 'e2', 'e4');
+    await play(user, 'd7', 'd5');
+    await play(user, 'e4', 'd5');
+    expect(playMoveSound).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(playMoveSound).mock.calls.map((c) => c[0])).toEqual([
+      'move',
+      'move',
+      'capture',
+    ]);
+  });
+
+  it('does not play for a move the rules refuse', async () => {
+    const user = userEvent.setup();
+    render(<LocalGame />);
+    await play(user, 'e2', 'e5');
+    expect(playMoveSound).not.toHaveBeenCalled();
   });
 });

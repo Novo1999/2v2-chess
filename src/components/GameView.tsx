@@ -1,11 +1,12 @@
-import type { ReactNode } from 'react';
-import type { Color, GameState, MoveIntent, Slot } from '../game/types';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import type { Color, GameState, MoveIntent, MoveRecord, Slot } from '../game/types';
 import { SLOT_COLOR } from '../game/types';
 import { colorToMove, isCheck, kingSquare, slotToMove } from '../game/rules';
 import { capturedTray, toPgn } from '../game/derive';
 import { Board } from './Board';
 import { CapturedTray } from './CapturedTray';
 import { MoveList } from './MoveList';
+import { isMuted, playMoveSound, setMuted } from '../sound';
 
 interface Props {
   state: GameState;
@@ -17,6 +18,8 @@ interface Props {
   controls: readonly Slot[];
   /** The seat this client occupies, for the "you" badge. Null when spectating. */
   you?: Slot | null;
+  /** Display names by seat. Seats without one show their slot label. */
+  names?: Partial<Record<Slot, string>>;
   orientation: Color;
   onMove: (intent: MoveIntent) => void;
   /** Transport-specific panels: clocks, seats, connection, offers. */
@@ -29,6 +32,7 @@ export function GameView({
   state,
   controls,
   you = null,
+  names = {},
   orientation,
   onMove,
   aside,
@@ -44,6 +48,8 @@ export function GameView({
   const inCheck = isCheck(state.fen);
   const checkSquare = inCheck ? kingSquare(state.fen, colorToMove(state)) : null;
 
+  useMoveSounds(state.moves);
+
   return (
     <div className="game">
       <div className="game-main">
@@ -53,6 +59,7 @@ export function GameView({
             slot={oppositeSeatShown(state, orientation)}
             state={state}
             you={you}
+            names={names}
           />
           <CapturedTray tray={tray} side={flip(orientation)} />
         </div>
@@ -71,19 +78,56 @@ export function GameView({
             slot={nearSeatShown(state, orientation)}
             state={state}
             you={you}
+            names={names}
           />
           <CapturedTray tray={tray} side={orientation} />
         </div>
       </div>
 
       <aside className="panel">
-        <Verdict state={state} yours={yours} inCheck={inCheck} />
+        <Verdict state={state} yours={yours} inCheck={inCheck} names={names} />
         {aside}
         <MoveList moves={state.moves} />
-        {actions && <div className="actions">{actions}</div>}
+        <div className="actions">
+          <SoundToggle />
+          {actions}
+        </div>
         <pre className="pgn">{toPgn(state.moves, state.result)}</pre>
       </aside>
     </div>
+  );
+}
+
+/**
+ * A sound for each move that arrives, whoever played it — the mover hears it
+ * the instant the local write lands, everyone else when the listener fires.
+ * The first render is a game being loaded, not a move being played, so it is
+ * silent; so is a move rolled back by a rejected write.
+ */
+function useMoveSounds(moves: readonly MoveRecord[]) {
+  const seen = useRef<number | null>(null);
+  useEffect(() => {
+    const before = seen.current;
+    seen.current = moves.length;
+    if (before === null || moves.length <= before) return;
+    playMoveSound(moves[moves.length - 1]?.captured ? 'capture' : 'move');
+  }, [moves]);
+}
+
+function SoundToggle() {
+  const [muted, setMutedState] = useState(isMuted);
+  return (
+    <label className="toggle">
+      <input
+        type="checkbox"
+        checked={!muted}
+        onChange={(e) => {
+          setMuted(!e.target.checked);
+          setMutedState(!e.target.checked);
+        }}
+      />
+      Move sounds
+    </label>
   );
 }
 
@@ -106,19 +150,32 @@ function SeatBadge({
   slot,
   state,
   you,
+  names,
 }: {
   slot: Slot | Color;
   state: GameState;
   you: Slot | null;
+  names: Partial<Record<Slot, string>>;
 }) {
   const isSeat = slot === 'P1' || slot === 'P2' || slot === 'P3' || slot === 'P4';
   const onTurn = isSeat && slot === slotToMove(state) && state.status === 'active';
   const army = isSeat ? SLOT_COLOR[slot] : (slot as Color);
 
+  // Off-turn, a strip names the whole team: in consultation chess the army
+  // belongs to both of them, not to whoever happened to move last.
+  const teamNames = state.turnOrder
+    .filter((seat) => SLOT_COLOR[seat] === army && names[seat])
+    .map((seat) => names[seat])
+    .join(' & ');
+  const label = isSeat
+    ? (names[slot] ?? slot)
+    : teamNames || (army === 'w' ? 'White' : 'Black');
+
   return (
     <span className={`seat ${onTurn ? 'on-turn' : ''}`}>
       <span className={`pip pip-${army}`} />
-      {isSeat ? slot : army === 'w' ? 'White' : 'Black'}
+      {label}
+      {isSeat && names[slot] && <span className="slottag">{slot}</span>}
       {isSeat && slot === you && <span className="you">you</span>}
       {onTurn && <span className="tomove">to move</span>}
     </span>
@@ -129,10 +186,12 @@ function Verdict({
   state,
   yours,
   inCheck,
+  names,
 }: {
   state: GameState;
   yours: boolean;
   inCheck: boolean;
+  names: Partial<Record<Slot, string>>;
 }) {
   if (state.status !== 'active') {
     const label: Record<string, string> = {
@@ -154,7 +213,7 @@ function Verdict({
   const toMove = slotToMove(state);
   return (
     <div className={`verdict ${yours ? 'yours' : ''}`}>
-      <strong>{yours ? 'Your move' : `${toMove} to move`}</strong>
+      <strong>{yours ? 'Your move' : `${names[toMove] ?? toMove} to move`}</strong>
       {inCheck && <span className="incheck">check</span>}
     </div>
   );

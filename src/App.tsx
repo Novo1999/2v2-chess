@@ -64,7 +64,7 @@ export default function App() {
 
       {route.at === 'game' &&
         (isConfigured ? (
-          <Online gameId={route.id} name={name} onLeave={() => go('')} />
+          <Online gameId={route.id} name={name} onName={rename} onLeave={() => go('')} />
         ) : (
           <div className="notice error">
             <p>This build has no Firebase configuration, so online rooms are off.</p>
@@ -79,10 +79,12 @@ export default function App() {
 function Online({
   gameId,
   name,
+  onName,
   onLeave,
 }: {
   gameId: string;
   name: string;
+  onName: (name: string) => void;
   onLeave: () => void;
 }) {
   const identity = useIdentity();
@@ -105,7 +107,8 @@ function Online({
     <OnlineGame
       gameId={gameId}
       uid={identity.value}
-      name={name || 'Player'}
+      name={name}
+      onName={onName}
       onLeave={onLeave}
     />
   );

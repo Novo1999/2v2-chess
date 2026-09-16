@@ -7,6 +7,8 @@ interface Props {
   gameId: string;
   game: NetGame;
   mySlot: Slot | null;
+  name: string;
+  onName: (name: string) => void;
   busy: boolean;
   onClaim: (slot: Slot) => void;
   onStart: () => void;
@@ -18,9 +20,22 @@ interface Props {
  * settle who is on whose team by talking about it, which is the one mechanism
  * guaranteed to be available to them.
  */
-export function Lobby({ gameId, game, mySlot, busy, onClaim, onStart, onLeave }: Props) {
+export function Lobby({
+  gameId,
+  game,
+  mySlot,
+  name,
+  onName,
+  busy,
+  onClaim,
+  onStart,
+  onLeave,
+}: Props) {
   const seats = seatsOf(game);
   const ready = allSeatsFilled(game);
+  // Friends usually arrive by pasted link and never see the home screen, so the
+  // lobby is the one place every player is guaranteed to pass through.
+  const named = name.trim().length > 0;
 
   return (
     <div className="lobby">
@@ -31,6 +46,20 @@ export function Lobby({ gameId, game, mySlot, busy, onClaim, onStart, onLeave }:
           Copy
         </button>
       </div>
+
+      {mySlot === null && (
+        <label className="field">
+          <span className="label">Your name</span>
+          <input
+            type="text"
+            value={name}
+            maxLength={24}
+            placeholder="so your friends know which seat is you"
+            autoFocus={!named}
+            onChange={(e) => onName(e.target.value)}
+          />
+        </label>
+      )}
 
       <div className="teams">
         {(['w', 'b'] as const).map((army) => (
@@ -54,7 +83,7 @@ export function Lobby({ gameId, game, mySlot, busy, onClaim, onStart, onLeave }:
                       </span>
                     ) : (
                       <button
-                        disabled={busy || mySlot !== null}
+                        disabled={busy || mySlot !== null || !named}
                         onClick={() => onClaim(slot)}
                       >
                         Take this seat
@@ -69,7 +98,9 @@ export function Lobby({ gameId, game, mySlot, busy, onClaim, onStart, onLeave }:
 
       <p className="hint">
         {mySlot === null
-          ? 'Pick a seat. Teammates alternate turns commanding the same army.'
+          ? named
+            ? 'Pick a seat. Teammates alternate turns commanding the same army.'
+            : 'Enter your name, then pick a seat.'
           : ready
             ? 'Everyone is seated.'
             : 'Waiting for the rest of the table.'}

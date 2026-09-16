@@ -231,6 +231,7 @@ input[type='text'] {
 .pip-w { background: #fff; }
 .pip-b { background: #202020; border-color: #666; }
 .you,
+.slottag,
 .tomove {
   font-weight: 500;
   font-size: 11px;
@@ -325,6 +326,8 @@ input[type='text'] {
   gap: 12px;
 }
 .card h2 { margin: 0; font-size: 15px; }
+.name-card { grid-column: 1 / -1; }
+.name-card .field { max-width: 320px; }
 
 .field { display: flex; flex-direction: column; gap: 6px; }
 .row { display: flex; gap: 7px; flex-wrap: wrap; }
