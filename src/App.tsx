@@ -4,25 +4,12 @@ import { LocalGame } from './LocalGame';
 import { OnlineGame } from './OnlineGame';
 import { isConfigured } from './net/firebase';
 import { useIdentity } from './net/hooks';
-
-/**
- * Routing is the URL hash and nothing more. A room code in the address bar is
- * the thing people paste to each other, and it survives a refresh — which is
- * the case seat reclamation (decision #8) exists to handle.
- */
-type Route = { at: 'home' } | { at: 'local' } | { at: 'game'; id: string };
-
-function parseHash(): Route {
-  const hash = window.location.hash.replace(/^#\/?/, '');
-  if (hash === 'local') return { at: 'local' };
-  const match = /^g\/([A-Z0-9]+)$/.exec(hash.toUpperCase());
-  return match?.[1] ? { at: 'game', id: match[1] } : { at: 'home' };
-}
+import { gameHash, parseHash, type Route } from './route';
 
 const NAME_KEY = 'consultation-chess:name';
 
 export default function App() {
-  const [route, setRoute] = useState<Route>(parseHash);
+  const [route, setRoute] = useState<Route>(() => parseHash(window.location.hash));
   const [name, setName] = useState(() => {
     try {
       return localStorage.getItem(NAME_KEY) ?? '';
@@ -32,14 +19,14 @@ export default function App() {
   });
 
   useEffect(() => {
-    const onChange = () => setRoute(parseHash());
+    const onChange = () => setRoute(parseHash(window.location.hash));
     window.addEventListener('hashchange', onChange);
     return () => window.removeEventListener('hashchange', onChange);
   }, []);
 
   function go(hash: string) {
     window.location.hash = hash;
-    setRoute(parseHash());
+    setRoute(parseHash(window.location.hash));
   }
 
   function rename(next: string) {
@@ -68,7 +55,7 @@ export default function App() {
         <Home
           name={name}
           onName={rename}
-          onOpen={(id) => go(`/g/${id}`)}
+          onOpen={(id) => go(gameHash(id))}
           onHotSeat={() => go('/local')}
         />
       )}
