@@ -3,6 +3,7 @@ import type { GameState, MoveIntent, Slot } from './game/types';
 import { TURN_ORDER_2, TURN_ORDER_4 } from './game/types';
 import { applyMove, colorToMove, createGame, resign, slotToMove } from './game/rules';
 import { GameView } from './components/GameView';
+import { ToggleSwitch } from './components/controls';
 
 /**
  * Hot seat. One device, every seat, no network — Phase 1 of PLAN.md.
@@ -47,14 +48,9 @@ export function LocalGame({ onExit }: { onExit?: () => void }) {
       }
       actions={
         <>
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={autoFlip}
-              onChange={(e) => setAutoFlip(e.target.checked)}
-            />
+          <ToggleSwitch checked={autoFlip} onChange={setAutoFlip}>
             Flip board each turn
-          </label>
+          </ToggleSwitch>
           <button onClick={() => reset(seats)}>New game</button>
           <button
             onClick={() => reset(seats === TURN_ORDER_4 ? TURN_ORDER_2 : TURN_ORDER_4)}

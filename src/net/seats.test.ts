@@ -18,11 +18,12 @@ import {
   seatsOf,
 } from './schema';
 import {
-  GIFT_MS,
+  GIFT_STEPS,
   RESERVE_MS,
   consentComplete,
   consentOutstanding,
   giftTarget,
+  giftLabel,
   giftUpdate,
   heldByOther,
   mayMoveNow,
@@ -184,7 +185,7 @@ describe('trading seats', () => {
   });
 });
 
-describe('handing the other team fifteen seconds', () => {
+describe('handing the other team time', () => {
   it('always points at the opponents, never at your own clock', () => {
     expect(giftTarget(game(), UID.P1)).toBe('b');
     expect(giftTarget(game(), UID.P3)).toBe('w');
@@ -198,8 +199,16 @@ describe('handing the other team fifteen seconds', () => {
     expect(giftTarget(game({ status: 'checkmate' }), UID.P1)).toBeNull();
   });
 
-  it('adds exactly fifteen seconds, and touches nothing else', () => {
-    expect(giftUpdate(game(), 'b')).toEqual({ 'clocks/b': 600000 + GIFT_MS });
+  it('defaults to the smallest step, and touches nothing else', () => {
+    expect(giftUpdate(game(), 'b')).toEqual({ 'clocks/b': 600000 + 15000 });
+  });
+
+  it.each(GIFT_STEPS)('adds exactly %ims when that step is chosen', (ms) => {
+    expect(giftUpdate(game(), 'b', ms)).toEqual({ 'clocks/b': 600000 + ms });
+  });
+
+  it('labels the steps the way the slider prints them', () => {
+    expect(GIFT_STEPS.map(giftLabel)).toEqual(['15s', '30s', '1m', '2m', '5m']);
   });
 });
 

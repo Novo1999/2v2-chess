@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Tooltip } from '@base-ui/react/tooltip';
 import { Home } from './Home';
 import { LocalGame } from './LocalGame';
 import { OnlineGame } from './OnlineGame';
@@ -39,7 +40,8 @@ export default function App() {
   }
 
   return (
-    <div className="app">
+    <Tooltip.Provider delay={350}>
+      <div className="app">
       <header className="topbar">
         <h1>
           <a href="#" className="brand" onClick={() => go('')}>
@@ -81,7 +83,8 @@ export default function App() {
             <button onClick={() => go('')}>Back</button>
           </div>
         ))}
-    </div>
+      </div>
+    </Tooltip.Provider>
   );
 }
 

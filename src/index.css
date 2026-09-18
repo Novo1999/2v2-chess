@@ -1,13 +1,46 @@
+/*
+ * Monochrome, and the greys are Base UI's own.
+ *
+ * Every value here is one of the neutrals its component demos use — their
+ * oklch(14.5%/26.9%/37.1%/70.8%) converted to hex — so the chrome and the
+ * Base UI parts are drawn from one palette rather than two that nearly match.
+ * There is no accent hue: emphasis is inversion (white fill, black ink), and
+ * hierarchy is border and weight.
+ *
+ * The board is the exception, and deliberately so. Its themes are a feature
+ * the player chooses, and check, last move and mate are information rather
+ * than decoration — those keep their colour further down this file.
+ */
 :root {
-  --bg: #14161a;
-  --panel: #1c2027;
-  --line: #2b313b;
-  --text: #e6e9ef;
-  --muted: #8d97a8;
-  --accent: #6ea8fe;
+  --bg: #0a0a0a;
+  --panel: #0a0a0a;
+  --sunken: #000;
+  /* Structure is dim; anything you can operate is bordered in white. */
+  --line: #2e2e2e;
+  --line-strong: #fff;
+  --text: #fff;
+  --muted: #a3a3a3;
+  --hover: #262626;
+  --active: #404040;
+  --disabled: #707070;
+  /* Kept as names so existing rules resolve; all of them are now simply ink. */
+  --accent: #fff;
+  --accent-bright: #fff;
+  --accent-ink: #0a0a0a;
   --light: #ebecd0;
   --dark: #739552;
-  --danger: #d9534f;
+  --danger: #fff;
+
+  /* Square, like the demos. A radius is an ornament this look does without. */
+  --r-sm: 0px;
+  --r: 0px;
+  --r-lg: 0px;
+
+  --shadow-sm: none;
+  --shadow: none;
+  --shadow-pop: none;
+
+  --ease: 140ms cubic-bezier(0.22, 0.61, 0.36, 1);
   color-scheme: dark;
 }
 
@@ -17,31 +50,69 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font: 14px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font: 14px/1.55 system-ui, -apple-system, 'Segoe UI', Inter, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
+/* One focus ring for everything, drawn outside the element so it never shifts
+   layout or gets clipped by a rounded corner. */
+:where(button, input, a, [tabindex]):focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+/* Base UI's button demo, verbatim but pinned to its dark branch: a white
+   hairline, no fill, square, and a grey wash on hover. */
 button {
   font: inherit;
+  font-weight: 400;
+  line-height: 1;
   color: var(--text);
-  background: #262c35;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 6px 12px;
+  background-color: var(--bg);
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  padding: 8px 13px;
   cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  transition: background-color var(--ease), color var(--ease), border-color var(--ease);
 }
-button:hover:not(:disabled) { background: #303845; }
-button:disabled { opacity: 0.4; cursor: default; }
-button.danger { border-color: #4a2b2b; color: #ffb3b0; }
-button.primary { background: var(--accent); color: #0b1220; border-color: var(--accent); font-weight: 600; }
+button:hover:not(:disabled) { background-color: var(--hover); }
+button:active:not(:disabled) { background-color: var(--active); }
+button:disabled { color: var(--disabled); border-color: var(--disabled); cursor: default; }
+
+/* Emphasis without a hue: the one button that matters is inverted. */
+button.primary {
+  background-color: var(--text);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+button.primary:hover:not(:disabled) { background-color: #d4d4d4; }
+button.primary:active:not(:disabled) { background-color: #a3a3a3; }
+button.primary:disabled { background-color: transparent; color: var(--disabled); }
+
+/* Nothing red left to warn with, so a destructive action is set apart by
+   weight and a dashed edge instead of by colour. */
+button.danger { border-style: dashed; }
 
 input[type='text'] {
   font: inherit;
   color: var(--text);
-  background: #11141a;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 7px 10px;
+  background-color: var(--sunken);
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  padding: 8px 11px;
+  transition: background-color var(--ease);
 }
+input[type='text']:hover { background-color: var(--hover); }
+input[type='text']:focus {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+  background-color: var(--sunken);
+}
+input[type='text']::placeholder { color: var(--disabled); }
 
 .app { max-width: 1080px; margin: 0 auto; padding: 20px 16px 48px; }
 
@@ -180,7 +251,7 @@ input[type='text'] {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  color: #a8ccff;
+  color: var(--text);
 }
 .premove-notice button { font-size: 12px; }
 .premove-hint { margin: 0; color: var(--muted); font-size: 12px; }
@@ -307,21 +378,21 @@ input[type='text'] {
   gap: 8px;
   padding: 9px 11px;
   border-radius: 8px;
-  background: #11141a;
+  background: var(--sunken);
   border: 1px solid var(--line);
 }
 .verdict.yours { border-color: var(--accent); }
-.verdict.over { border-color: #4b5565; }
-.verdict .incheck { color: #ffb3b0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px; }
+.verdict.over { border-color: var(--line-strong); }
+.verdict .incheck { color: var(--text); font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px; }
 .verdict span { color: var(--muted); }
 
 .reject {
   margin: 0 0 10px;
   padding: 8px 11px;
   border-radius: 8px;
-  background: #2a1b1b;
-  border: 1px solid #4a2b2b;
-  color: #ffb3b0;
+  background: var(--sunken);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
 }
 
 /* ---- move list ---- */
@@ -335,7 +406,7 @@ input[type='text'] {
   font-variant-numeric: tabular-nums;
 }
 .movelist li { display: grid; grid-template-columns: 28px 1fr 1fr; gap: 4px; padding: 2px 0; }
-.movelist li:nth-child(odd) { background: rgba(255, 255, 255, 0.03); }
+.movelist li:nth-child(odd) { background: rgba(255, 255, 255, 0.04); }
 .movenum { color: var(--muted); }
 .half { display: flex; align-items: baseline; gap: 5px; }
 .half .by { font-size: 10px; color: var(--muted); }
@@ -344,7 +415,7 @@ input[type='text'] {
 .pgn {
   margin: 0;
   padding: 8px;
-  background: #11141a;
+  background: var(--sunken);
   border: 1px solid var(--line);
   border-radius: 6px;
   color: var(--muted);
@@ -367,7 +438,7 @@ input[type='text'] {
 
 /* ---- home, lobby, rooms ---- */
 
-.home { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; align-items: start; }
+
 
 .card {
   background: var(--panel);
@@ -379,7 +450,6 @@ input[type='text'] {
   gap: 12px;
 }
 .card h2 { margin: 0; font-size: 15px; }
-.name-card { grid-column: 1 / -1; }
 .name-card .field { max-width: 320px; }
 
 .field { display: flex; flex-direction: column; gap: 6px; }
@@ -440,13 +510,13 @@ button.big { padding: 10px; }
   padding: 7px 10px;
   border-radius: 8px;
   border: 1px solid var(--line);
-  background: #11141a;
+  background: var(--sunken);
 }
 .clock.running { border-color: var(--accent); }
-.clock.low .clock-time { color: #ffb3b0; }
+.clock.low .clock-time { color: var(--text); text-decoration: underline; }
 .clock-time { font-size: 22px; font-variant-numeric: tabular-nums; font-weight: 600; }
 .clock-owner { color: var(--muted); font-size: 11px; text-align: right; }
-.clock-b .clock-time { color: #cfd6e4; }
+.clock-b .clock-time { color: var(--text); }
 
 /* ---- offers, notices ---- */
 
@@ -471,8 +541,8 @@ button.big { padding: 10px; }
   padding: 18px;
   text-align: center;
 }
-.notice.error { border-color: #4a2b2b; }
-.reject.takeover { background: #2a2418; border-color: #4a3f2b; color: #ffd98c; }
+.notice.error { border-color: var(--line-strong); border-style: dashed; }
+.reject.takeover { background: var(--hover); border-color: var(--line-strong); color: var(--text); }
 
 @media (max-width: 560px) {
   .teams { grid-template-columns: 1fr; }
@@ -481,7 +551,7 @@ button.big { padding: 10px; }
 .reject p { margin: 0 0 6px; }
 .reject p:last-child { margin-bottom: 0; }
 .reject code { background: rgba(0,0,0,0.3); padding: 1px 4px; border-radius: 3px; }
-.reject .hint { color: #d9a0a0; font-size: 11px; }
+.reject .hint { color: var(--muted); font-size: 11px; }
 
 /* ---- player list ---- */
 
@@ -493,21 +563,20 @@ button.big { padding: 10px; }
   padding: 7px 10px;
   border-radius: 7px;
   border: 1px solid transparent;
-  background: #161a20;
+  background: var(--sunken);
   color: var(--muted);
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .player-name { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .player-row.to-move {
   color: var(--text);
-  background: rgba(110, 168, 254, 0.2);
+  background: var(--active);
   border-color: var(--accent);
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
 /* ---- board & piece picker ---- */
 
-.home-column { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 
 .appearance { display: flex; flex-direction: column; gap: 12px; }
 .appearance.compact { gap: 8px; }
@@ -518,14 +587,25 @@ button.big { padding: 10px; }
   align-items: center;
   gap: 6px;
   padding: 7px;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   border-radius: 9px;
-  background: #161a20;
+  background: var(--sunken);
+  box-shadow: none;
 }
-.choice.on { border-color: var(--accent); background: rgba(110, 168, 254, 0.12); }
+/* Base UI marks the chosen toggle with data-pressed; this used to be a
+   hand-set `.on` class alongside a hand-set role="radio". */
+.choice[data-pressed] {
+  border-color: var(--accent);
+  background: var(--active);
+  box-shadow: none;
+}
 .choice-label { font-size: 12px; font-weight: 600; }
 .compact .choice { padding: 4px; gap: 3px; border-radius: 7px; }
 .compact .choice-label { font-size: 11px; }
+
+/* Text-only groups — the seat count, the clock — are a row of equal pills. */
+.choices.wide { grid-template-columns: repeat(auto-fit, minmax(74px, 1fr)); }
+.choices.wide .choice { flex-direction: row; justify-content: center; padding: 8px 10px; font-weight: 600; }
 
 .board-preview,
 .pieces-preview {
@@ -586,7 +666,7 @@ button.big { padding: 10px; }
   z-index: 20;
   display: grid;
   place-items: center;
-  background: rgba(8, 10, 14, 0.55);
+  background: rgba(0, 0, 0, 0.62);
   /* Wait a beat: the final move should be seen landing before the card. */
   animation: result-fade 0.4s ease-out 0.7s both;
 }
@@ -620,13 +700,13 @@ button.big { padding: 10px; }
   letter-spacing: 1.4px;
   padding: 3px 10px;
   border-radius: 999px;
-  background: #2b313b;
+  background: var(--hover);
   color: var(--muted);
 }
-.personal-won .result-personal { background: #16a34a; color: #fff; }
-.personal-lost .result-personal { background: #dc2626; color: #fff; }
+.personal-won .result-personal { background: var(--text); color: var(--accent-ink); }
+.personal-lost .result-personal { background: transparent; color: var(--text); box-shadow: inset 0 0 0 1px var(--text); }
 .result-title { font-size: 34px; font-weight: 800; letter-spacing: -0.5px; }
-.result-checkmate .result-title { color: #f87171; }
+.result-checkmate .result-title { color: var(--text); }
 .result-winner { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 600; }
 .result-detail { color: var(--muted); }
 .result-score { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; margin: 4px 0 8px; }
@@ -679,7 +759,7 @@ button.big { padding: 10px; }
   font-variant-numeric: tabular-nums;
 }
 .movelist button.half:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); }
-.movelist button.half[aria-current='true'] { background: rgba(110, 168, 254, 0.28); color: #fff; }
+.movelist button.half[aria-current='true'] { background: var(--text); color: var(--accent-ink); }
 .movelist li:has(button.half[aria-current='true']) .movenum { color: var(--text); }
 
 .history-nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
@@ -688,12 +768,12 @@ button.big { padding: 10px; }
 .history-nav .back-to-live:not(:disabled) {
   background: var(--accent);
   border-color: var(--accent);
-  color: #0b1220;
+  color: var(--accent-ink);
   animation: live-nudge 1.6s ease-in-out infinite;
 }
 @keyframes live-nudge {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(110, 168, 254, 0.5); }
-  50% { box-shadow: 0 0 0 4px rgba(110, 168, 254, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.45); }
+  50% { box-shadow: 0 0 0 4px rgba(255, 255, 255, 0); }
 }
 /* An old position must never pass for the live one. */
 .board-wrap.browsing .board { box-shadow: 0 0 0 3px #f59e0b; }
@@ -771,15 +851,15 @@ button.big { padding: 10px; }
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: #22c55e;
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+  background: var(--text);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.16);
 }
-.presence-off { color: #f87171; }
+.presence-off { color: var(--muted); }
 .presence-off svg { width: 16px; height: 16px; }
 .player-row .you + .presence,
 .player-row .slottag + .presence { margin-left: 6px; }
-.player-row.offline .player-name { text-decoration: line-through; text-decoration-color: rgba(248, 113, 113, 0.6); }
-.player-row.offline { border-style: dashed; border-color: rgba(248, 113, 113, 0.45); }
+.player-row.offline .player-name { text-decoration: line-through; text-decoration-color: var(--muted); }
+.player-row.offline { border-style: dashed; border-color: var(--muted); }
 .seat .presence { margin-left: 0; }
 .occupant .presence { margin-left: 2px; }
 
@@ -795,13 +875,6 @@ button.big { padding: 10px; }
 
 .seat-action { font-size: 12px; padding: 3px 8px; }
 
-.givetime {
-  width: 100%;
-  font-size: 12px;
-  border-color: #2f5540;
-  color: #9fe0b8;
-}
-.givetime:hover:not(:disabled) { background: rgba(80, 200, 130, 0.14); }
 
 .openseats { display: flex; flex-direction: column; gap: 4px; }
 .openseats button {
@@ -832,4 +905,297 @@ button.big { padding: 10px; }
   border-radius: 3px;
   border: 1px solid var(--line);
   color: var(--text);
+}
+
+
+/* ---------------------------------------------------------------------------
+   Base UI parts
+   ---------------------------------------------------------------------------
+   Base UI ships no CSS at all — "components are unstyled, don't bundle CSS...
+   you retain total control of your styling layer" (its styling handbook). So
+   the styles below are Base UI's OWN, lifted from the CSS Modules examples that
+   ship in the package at docs/react/components/*.md, with the demo class names
+   (.Track, .Thumb, .Popup) mapped onto ours.
+
+   One deliberate departure. Those demos switch theme on
+   `@media (prefers-color-scheme: dark)`, but this app is dark unconditionally —
+   it sets `color-scheme: dark` and paints its own background. Taken verbatim,
+   every one of these parts would render its LIGHT palette for anyone whose OS
+   is in light mode: white popups and near-black text inside a dark app. So each
+   rule below takes the demo's dark branch and applies it always, which is the
+   same styling pinned to the one theme the app actually has.
+
+   State comes from the data-attributes each component sets — [data-checked],
+   [data-pressed], [data-starting-style] — exactly as the demos do it, which is
+   why the React above carries almost no conditional markup.
+--------------------------------------------------------------------------- */
+
+/* ---- switch ---- */
+
+.switch-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 400;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+
+.switch {
+  box-sizing: border-box;
+  display: flex;
+  flex-shrink: 0;
+  border: 1px solid var(--text);
+  border-radius: 999px;
+  padding: 0.125rem;
+  width: 2.25rem;
+  height: 1.25rem;
+  background-color: var(--bg);
+  transition: background-color 150ms ease;
+}
+.switch[data-checked] { background-color: var(--text); }
+.switch:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+
+.switch-thumb {
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 999px;
+  background-color: var(--text);
+  transition:
+    translate 150ms ease,
+    background-color 150ms ease;
+}
+.switch[data-checked] .switch-thumb {
+  translate: 1rem 0;
+  background-color: var(--bg);
+}
+
+/* ---- slider ---- */
+
+.slider { display: flex; flex-direction: column; gap: 0; }
+
+.slider-control {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding-block: 0.625rem;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.slider-track {
+  width: 100%;
+  height: 0.25rem;
+  border-radius: 999px;
+  background-color: var(--line-strong);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.slider-indicator {
+  border-radius: 999px;
+  background-color: var(--text);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.slider-thumb {
+  box-sizing: border-box;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--text);
+  background-color: var(--bg);
+  -webkit-user-select: none;
+  user-select: none;
+}
+.slider-thumb:has(:focus-visible) {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+/* The notches under the track. Labels, not controls — see the note in the
+   component. Base UI has no part for these, so they are ours. */
+.slider-ticks { display: flex; justify-content: space-between; }
+.slider-ticks span {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.slider-ticks span.on { color: var(--text); font-weight: 700; }
+
+/* ---- popover ---- */
+
+.popup {
+  box-sizing: border-box;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem;
+  outline: none;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  background-color: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow-pop);
+  transform-origin: var(--transform-origin);
+  transition:
+    transform 100ms ease-out,
+    opacity 100ms ease-out;
+  width: 15rem;
+  max-width: var(--available-width, 500px);
+}
+.popup[data-starting-style],
+.popup[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.98);
+}
+
+.popup-title { margin: 0; font-size: 0.875rem; line-height: 1.25rem; font-weight: 700; }
+.popup-note { margin: 0; font-size: 0.8125rem; line-height: 1.2rem; color: var(--muted); }
+
+.popup-arrow { display: block; position: relative; width: 12px; height: 6px; overflow: clip; }
+.popup-arrow[data-side='top'] { bottom: -6px; rotate: 180deg; }
+.popup-arrow[data-side='bottom'] { top: -6px; rotate: 0deg; }
+.popup-arrow[data-side='left'] { right: -9px; rotate: 90deg; }
+.popup-arrow[data-side='right'] { left: -9px; rotate: -90deg; }
+.popup-arrow::before {
+  content: '';
+  display: block;
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  box-sizing: border-box;
+  width: calc(6px * sqrt(2));
+  height: calc(6px * sqrt(2));
+  background-color: var(--panel);
+  border: 1px solid var(--line-strong);
+  transform: translate(-50%, 50%) rotate(45deg);
+}
+
+.give-confirm { width: 100%; margin-top: 0.25rem; }
+
+/* ---- tooltip ---- */
+
+.tooltip {
+  box-sizing: border-box;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background-color: var(--panel);
+  color: var(--text);
+  font-size: 0.8125rem;
+  line-height: 1.1rem;
+  white-space: nowrap;
+  transform-origin: var(--transform-origin);
+  transition:
+    transform 150ms ease-out,
+    opacity 150ms ease-out;
+}
+.tooltip[data-starting-style],
+.tooltip[data-ending-style] { opacity: 0; transform: scale(0.9); }
+.tooltip-arrow { display: none; }
+
+/* The anchor wraps something small and wordless, and must not disturb it. */
+.hint-anchor { display: inline-flex; align-items: center; }
+
+/* ---- polish ---- */
+
+/* Anything that counts gets tabular figures, so digits stop jittering as they
+   tick — clocks most of all, but the move list and the trays too. */
+.clock-time,
+.movelist,
+.roomcode code { font-variant-numeric: tabular-nums; }
+
+.card,
+.panel,
+.notice { box-shadow: var(--shadow); }
+
+.panel { border-radius: var(--r-lg); padding: 15px; }
+
+.topbar { padding-bottom: 14px; margin-bottom: 22px; }
+.topbar h1 { letter-spacing: -0.2px; font-weight: 650; }
+
+h2 { letter-spacing: -0.15px; }
+
+.label { font-size: 10.5px; letter-spacing: 0.9px; }
+
+.roomcode code { border-radius: var(--r-sm); box-shadow: inset 0 0 0 1px var(--line); }
+
+.givetime {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  font-size: 12.5px;
+}
+.givetime .icon { width: 15px; height: 15px; flex: none; }
+
+.openseats button { justify-content: space-between; }
+
+/* ---- home ---- */
+
+/*
+ * Three ways in, laid out by how much deciding each one takes. Opening a table
+ * has choices to make, so it gets the tall column; joining and hot seat are one
+ * action each and sit stacked beside it. Name above all three because they all
+ * need it; appearance below, because it is a preference and not a way in.
+ */
+.home {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  grid-template-areas:
+    'name name'
+    'play join'
+    'play local'
+    'look look';
+  gap: 16px;
+  align-items: start;
+}
+.name-card { grid-area: name; }
+.play-card { grid-area: play; }
+.join-card { grid-area: join; }
+.local-card { grid-area: local; }
+.look-card { grid-area: look; }
+
+.name-card .field { max-width: 320px; }
+
+/* A heading and its one line of explanation are one unit, and should not be
+   spaced apart by the card's own gap. */
+.card-head { display: flex; flex-direction: column; gap: 4px; }
+.card-head .hint { margin: 0; }
+
+/* Pins the action to the bottom of a card, so the three cards' buttons line up
+   rather than floating wherever their content happens to end. */
+.card-foot { margin-top: auto; display: flex; flex-direction: column; gap: 8px; }
+.play-card,
+.join-card,
+.local-card { height: 100%; }
+
+.codeinput {
+  font-size: 20px;
+  letter-spacing: 6px;
+  text-align: center;
+  text-transform: uppercase;
+  padding: 10px 12px;
+}
+.codeinput::placeholder { letter-spacing: 6px; color: #3d4452; }
+
+button.big { padding: 10px 16px; font-size: 15px; }
+
+@media (max-width: 760px) {
+  .home {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'name' 'play' 'join' 'local' 'look';
+  }
+  .play-card,
+  .join-card,
+  .local-card { height: auto; }
 }

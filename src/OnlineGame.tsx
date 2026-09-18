@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Popover } from '@base-ui/react/popover';
+import { Slider } from '@base-ui/react/slider';
 import { child, push, ref, update } from 'firebase/database';
 import type { MoveIntent, Slot } from './game/types';
 import { SLOT_COLOR } from './game/types';
@@ -23,9 +25,11 @@ import {
   vacateSeat,
 } from './net/seat';
 import {
+  GIFT_STEPS,
   clearOfferUpdate,
   clockNow,
   consentComplete,
+  giftLabel,
   giftTarget,
   giftUpdate,
   hasFlagged,
@@ -220,18 +224,14 @@ export function OnlineGame({ gameId, uid, name, onName, onLeave }: Props) {
               game={live}
               uid={uid}
               busy={busy}
-              onGive={(army) => void write(giftUpdate(live, army))}
+              onGive={(army, ms) => void write(giftUpdate(live, army, ms))}
             />
             <OpenSeats
               game={live}
               mySlot={mySlot}
               busy={busy}
               onTake={(slot) =>
-                seatOp(() =>
-                  mySlot
-                    ? moveToSeat(getDb(), gameId, mySlot, slot, uid, name.trim())
-                    : claimSeat(getDb(), gameId, slot, uid, name.trim()),
-                )
+                seatOp(() => claimSeat(getDb(), gameId, slot, uid, name.trim()))
               }
             />
             <div className="roomcode small">
@@ -331,10 +331,15 @@ function armyLabel(game: NetGame, army: 'w' | 'b'): string {
 }
 
 /**
- * Fifteen seconds to the other team — the chess.com gesture. It can only ever
- * cost you the game, which is why it is offered without a budget or a cooldown.
+ * Time to the other team — the chess.com gesture. It can only ever cost you the
+ * game, which is why it is offered without a budget or a cooldown.
+ *
+ * The slider runs over the *index* of the permitted amounts rather than over
+ * milliseconds, because the steps are not evenly spaced: 15s, 30s, 1m, 2m, 5m
+ * doubles and then jumps. Rules name the same five amounts outright, so a value
+ * between them is not a thing the server would accept anyway.
  */
-function GiveTime({
+export function GiveTime({
   game,
   uid,
   busy,
@@ -343,24 +348,105 @@ function GiveTime({
   game: NetGame;
   uid: string;
   busy: boolean;
-  onGive: (army: 'w' | 'b') => void;
+  onGive: (army: 'w' | 'b', ms: number) => void;
 }) {
+  const [step, setStep] = useState(0);
   const army = giftTarget(game, uid);
   if (!army) return null;
 
+  const side = army === 'w' ? 'White' : 'Black';
+  const ms = GIFT_STEPS[step] ?? GIFT_STEPS[0];
+
   return (
-    <button className="givetime" disabled={busy} onClick={() => onGive(army)}>
-      +15s to {army === 'w' ? 'White' : 'Black'}
-    </button>
+    <Popover.Root>
+      <Popover.Trigger className="givetime" disabled={busy}>
+        <ClockPlus />
+        Give time
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Positioner sideOffset={8}>
+          <Popover.Popup className="popup">
+            <Popover.Arrow className="popup-arrow" />
+            <Popover.Title className="popup-title">Give {side} time</Popover.Title>
+            <Popover.Description className="popup-note">
+              Straight onto their clock, and not refundable.
+            </Popover.Description>
+
+            <Slider.Root
+              className="slider"
+              value={step}
+              min={0}
+              max={GIFT_STEPS.length - 1}
+              step={1}
+              onValueChange={(value) =>
+                setStep(typeof value === 'number' ? value : (value[0] ?? 0))
+              }
+            >
+              <Slider.Control className="slider-control">
+                <Slider.Track className="slider-track">
+                  <Slider.Indicator className="slider-indicator" />
+                  {/* Derived from the slider's own value rather than from
+                      `step` above, so the spoken amount cannot drift from the
+                      one the confirm button is about to send. */}
+                  <Slider.Thumb
+                    className="slider-thumb"
+                    aria-label={`How much time to give ${side}`}
+                    getAriaValueText={(_formatted, value) =>
+                      giftLabel(GIFT_STEPS[value] ?? GIFT_STEPS[0])
+                    }
+                  />
+                </Slider.Track>
+              </Slider.Control>
+              {/* Labels, not controls. Base UI's track already jumps to the
+                  nearest step when it is clicked, so making these clickable too
+                  would only add five tab stops that do nothing new — and the
+                  amount is announced by the thumb's aria-valuetext. */}
+              <div className="slider-ticks" aria-hidden="true">
+                {GIFT_STEPS.map((amount, index) => (
+                  <span key={amount} className={index === step ? 'on' : ''}>
+                    {giftLabel(amount)}
+                  </span>
+                ))}
+              </div>
+            </Slider.Root>
+
+            <Popover.Close
+              className="primary give-confirm"
+              onClick={() => onGive(army, ms)}
+            >
+              Give {giftLabel(ms)}
+            </Popover.Close>
+          </Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
+
+function ClockPlus() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="icon">
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        d="M12 7v5l3 2M20.5 12a8.5 8.5 0 1 1-4.7-7.6M18.5 3.5v5M21 6h-5"
+      />
+    </svg>
   );
 }
 
 /**
  * Seats nobody took. They are playable by the teammate already, so this is not
- * a hole to be plugged — it is an invitation to whoever wandered in late, and a
- * way for a seated player to move across the table.
+ * a hole to be plugged — it is an invitation to whoever wandered in late.
+ *
+ * Only to whoever has no seat, though. Once the clocks are running, a player
+ * already at the table does not get to move across it: hopping seats mid-game
+ * changes who is on whose side, and nobody else at the table agreed to that.
+ * Moving seats stays available in the lobby, where it costs nothing.
  */
-function OpenSeats({
+export function OpenSeats({
   game,
   mySlot,
   busy,
@@ -372,14 +458,14 @@ function OpenSeats({
   onTake: (slot: Slot) => void;
 }) {
   const open = emptySeats(game);
-  if (open.length === 0 || game.status !== 'active') return null;
+  if (mySlot !== null || game.status !== 'active' || open.length === 0) return null;
 
   return (
     <div className="openseats">
       <span className="label">Open seats</span>
       {open.map((slot) => (
         <button key={slot} disabled={busy} onClick={() => onTake(slot)}>
-          {mySlot ? `Move to ${slot}` : `Take ${slot}`}
+          Take {slot}
           <span className={`pip pip-${SLOT_COLOR[slot]}`} />
         </button>
       ))}

@@ -12,6 +12,7 @@ import { isMuted, playMoveSound, setMuted, type MoveSound } from '../sound';
 import { useAppearance } from '../appearance';
 import { AppearancePicker } from './AppearancePicker';
 import { usePremove } from './usePremove';
+import { ToggleSwitch } from './controls';
 
 interface Props {
   state: GameState;
@@ -401,17 +402,15 @@ function ResultCard({
 function SoundToggle() {
   const [muted, setMutedState] = useState(isMuted);
   return (
-    <label className="toggle">
-      <input
-        type="checkbox"
-        checked={!muted}
-        onChange={(e) => {
-          setMuted(!e.target.checked);
-          setMutedState(!e.target.checked);
-        }}
-      />
+    <ToggleSwitch
+      checked={!muted}
+      onChange={(on) => {
+        setMuted(!on);
+        setMutedState(!on);
+      }}
+    >
       Move sounds
-    </label>
+    </ToggleSwitch>
   );
 }
 

@@ -20,7 +20,7 @@ import type { Slot } from '../src/game/types';
 import type { NetGame } from '../src/net/schema';
 import { ROTATION_2, ROTATION_4 } from '../src/net/schema';
 import {
-  GIFT_MS as CLIENT_GIFT_MS,
+  GIFT_STEPS as CLIENT_GIFT_STEPS,
   RESERVE_MS as CLIENT_RESERVE_MS,
   giftUpdate,
   moveUpdate,
@@ -38,7 +38,7 @@ const SECRET = 'a-secret-of-sufficient-length-01';
 // agreeing with itself. The last test in each suite below asserts the match.
 const GRACE_MS = 25000;
 const RESERVE_MS = 2000;
-const GIFT_MS = 15000;
+const GIFT_STEPS = [15000, 30000, 60000, 120000, 300000];
 
 const UID: Record<Slot, string> = {
   P1: 'uid-p1',
@@ -985,9 +985,9 @@ describe('trading seats', () => {
 describe('handing the other team fifteen seconds', () => {
   const evenClocks = { w: 600000, b: 600000 };
 
-  it('lets a black seat add exactly fifteen seconds to the white clock', async () => {
+  it.each(GIFT_STEPS)('lets a black seat add %ims to the white clock', async (ms) => {
     const game = await seed({ clocks: evenClocks });
-    await assertSucceeds(update(ref(as('P3'), `games/${GID}`), giftUpdate(game, 'w')));
+    await assertSucceeds(update(ref(as('P3'), `games/${GID}`), giftUpdate(game, 'w', ms)));
   });
 
   it('lets a white seat do the same for black', async () => {
@@ -1000,12 +1000,15 @@ describe('handing the other team fifteen seconds', () => {
     await assertFails(update(ref(as('P1'), `games/${GID}`), giftUpdate(game, 'w')));
   });
 
-  it('refuses an amount that is not fifteen seconds', async () => {
-    await seed({ clocks: evenClocks });
-    await assertFails(
-      update(ref(as('P3'), `games/${GID}`), { 'clocks/w': 600000 + 60000 }),
-    );
-  });
+  // The steps are a fixed set, not a range. An amount between two of them — or
+  // beyond the largest — is not something the validate will name.
+  it.each([45000, 1000, 600000, 15001])(
+    'refuses %ims, which is not one of the steps',
+    async (ms) => {
+      const game = await seed({ clocks: evenClocks });
+      await assertFails(update(ref(as('P3'), `games/${GID}`), giftUpdate(game, 'w', ms)));
+    },
+  );
 
   it('refuses a gift from somebody with no seat', async () => {
     const game = await seed({ clocks: evenClocks });
@@ -1023,14 +1026,17 @@ describe('handing the other team fifteen seconds', () => {
    * onto their OWN clock while playing a legal move, and the decrement window
    * — the whole reason clocks are validated — would be bypassed every turn.
    */
-  it('refuses a mover bolting fifteen seconds onto their own clock', async () => {
-    const game = await seed({ clocks: evenClocks });
-    const cheat = move(game, 'e2', 'e4', as('P1'));
-    cheat['clocks/w'] = game.clocks.w + GIFT_MS;
-    await assertFails(update(ref(as('P1'), `games/${GID}`), cheat));
-  });
+  it.each(GIFT_STEPS)(
+    'refuses a mover bolting %ims onto their own clock',
+    async (ms) => {
+      const game = await seed({ clocks: evenClocks });
+      const cheat = move(game, 'e2', 'e4', as('P1'));
+      cheat['clocks/w'] = game.clocks.w + ms;
+      await assertFails(update(ref(as('P1'), `games/${GID}`), cheat));
+    },
+  );
 
-  it('keeps the gift in step with the client', () => {
-    expect(GIFT_MS).toBe(CLIENT_GIFT_MS);
+  it('keeps the steps in step with the client', () => {
+    expect(GIFT_STEPS).toEqual([...CLIENT_GIFT_STEPS]);
   });
 });

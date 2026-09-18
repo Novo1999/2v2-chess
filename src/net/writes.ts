@@ -30,8 +30,16 @@ export const GRACE_MS = 25000;
 /** Mirrors RESERVE_MS in rules/build.mjs — kept in step by a rules test. */
 export const RESERVE_MS = 2000;
 
-/** Mirrors GIFT_MS in rules/build.mjs — kept in step by a rules test. */
-export const GIFT_MS = 15000;
+/**
+ * The amounts one team may hand the other. Mirrors GIFT_STEPS in
+ * rules/build.mjs — kept in step by a rules test.
+ */
+export const GIFT_STEPS = [15000, 30000, 60000, 120000, 300000] as const;
+
+/** "15s", "30s", "1m", "2m", "5m" — the slider's notches. */
+export function giftLabel(ms: number): string {
+  return ms < 60000 ? `${Math.round(ms / 1000)}s` : `${Math.round(ms / 60000)}m`;
+}
 
 export type Update = Record<string, unknown>;
 
@@ -290,12 +298,16 @@ export function heldByOther(
 // --- handing the other team time -------------------------------------------
 
 /**
- * The chess.com gesture: fifteen seconds to the opponents, never to yourself.
- * That it can only ever cost you the game is why it needs no limit — see the
- * note on `giftTo` in rules/build.mjs.
+ * The chess.com gesture: time to the opponents, never to yourself. That it can
+ * only ever cost you the game is why it needs no limit — see the note on
+ * `giftTo` in rules/build.mjs.
  */
-export function giftUpdate(game: NetGame, to: 'w' | 'b'): Update {
-  return { [`clocks/${to}`]: game.clocks[to] + GIFT_MS };
+export function giftUpdate(
+  game: NetGame,
+  to: 'w' | 'b',
+  ms: number = GIFT_STEPS[0],
+): Update {
+  return { [`clocks/${to}`]: game.clocks[to] + ms };
 }
 
 /** The army a seated player is allowed to hand time to. */

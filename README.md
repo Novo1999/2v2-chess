@@ -49,15 +49,20 @@ Emulator data is thrown away when you stop it.
   one player; that is the only requirement.
 - **A latecomer drops straight in.** An empty seat stays open for the whole
   game, and **Open seats** in the side panel puts whoever turns up into it
-  mid-game. A seated player can use it to move across the table too.
+  mid-game. Only someone with no seat, though — once the clocks are running, a
+  player already at the table cannot hop to another seat, because that would
+  change who is on whose side mid-game. Moving seats stays available in the
+  lobby.
 - **Clicking an empty seat holds it for two seconds**, so two people reaching
   for the same one see it greyed out as *Being taken…* rather than both
   clicking and one of them losing. The hold expires on its own.
 - **Swapping seats** with somebody who already has one needs both of you to
   agree, the same way a draw does, and is a lobby-only move — once the clocks
   start, a swap would hand a player the other side's position mid-game.
-- **+15s to the other team**, as on chess.com, is in the side panel during a
-  game. Always to your opponents, never to yourself, as often as you like.
+- **Give the other team time**, as on chess.com. **Give time** in the side
+  panel opens a slider over five amounts — 15s, 30s, 1m, 2m, 5m — and hands the
+  chosen one straight to your opponents. Always to them, never to yourself, as
+  often as you like.
 - Right-click while dragging a piece to cancel the move and put it back.
 - Online players can select or drag a piece while waiting to queue one premove.
   Both squares turn blue. It plays automatically on your seat's next turn if
@@ -100,7 +105,7 @@ config object has no `databaseURL`, copy it from the Realtime Database page —
 it looks like `https://<project>-default-rtdb.<region>.firebasedatabase.app`.
 
 **Vite reads env files at startup**, so restart `npm run dev` afterwards. The
-"Create a room" button turns blue once the URL is set.
+"Create a room" button stops being disabled once the URL is set.
 
 ### 4. Sign the CLI in to the same project
 
@@ -147,8 +152,8 @@ It also covers the seat and clock changes above: vacating somebody else's seat,
 claiming a seat under another player's hold, post-dating a hold so it never
 expires, settling a seat swap with one signature, smuggling an unrelated uid
 into a seat under an agreed swap, swapping once the clocks are running, gifting
-time to your own army, and bolting fifteen seconds onto your own clock while
-playing a move.
+time to your own army, giving an amount that is not one of the five, and
+bolting time onto your own clock while playing a move.
 
 ## Layout
 
@@ -156,9 +161,31 @@ playing a move.
 src/game/      chess.js + the turn gate. No network, no React.
 src/net/       schema, writes as plain update objects, listeners, seats.
 src/components/board, move list, clocks, lobby, trays.
+src/components/controls.tsx  the shared Base UI controls
 rules/build.mjs      generates database.rules.json  <- edit this, not the JSON
 rules/*.test.ts      emulator suites
 ```
+
+## Interface
+
+The interactive controls — the time slider, the on/off switches, the board and
+piece choosers, the popover, the tooltips — are [Base UI](https://base-ui.com)
+primitives (`@base-ui/react`). They supply behaviour, keyboard handling and ARIA
+wiring, and **no styling at all**: the library bundles no CSS and leaves the
+entire appearance to the app.
+
+So the styles for those parts in `src/index.css` are Base UI's own, taken from
+the CSS Modules examples that ship inside the package at
+`node_modules/@base-ui/react/docs/react/components/*.md`. One departure: those
+demos switch palette on `prefers-color-scheme`, and this app is dark
+unconditionally, so each rule takes the demo's dark branch and applies it
+always. Verbatim, they would render white popups inside a dark app for anyone
+whose OS is in light mode.
+
+The interface is monochrome on purpose — no accent hue, emphasis by inversion,
+square corners. **The board is the exception**: its themes are a feature the
+player picks, and check, last move and mate keep their colour because it is
+information rather than decoration.
 
 `database.rules.json` is generated. RTDB rules have no functions, so the
 predicates are composed in `rules/build.mjs` and emitted; editing the JSON by
@@ -175,9 +202,9 @@ game among friends, not for a game among strangers.
 Two smaller ones came with the features above, both inside the same threat
 model — a griefing teammate was never defended against (PLAN.md residual #6):
 
-- Anybody seated can hand the opponents fifteen seconds, over and over. It can
-  only ever cost their own side the game, so rules cap the amount per press but
-  not the number of presses.
+- Anybody seated can hand the opponents time, over and over. It can only ever
+  cost their own side the game, so rules pin the amount per press to one of five
+  values but do not cap the number of presses.
 - Anybody signed in can hold an empty seat for two seconds at a time. Holding it
   shut means renewing that forever, and it never takes a seat off somebody who
   is already sitting in it.

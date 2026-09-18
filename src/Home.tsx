@@ -4,6 +4,7 @@ import { createGame, isValidCode, normalizeCode } from './net/rooms';
 import { DEFAULT_CLOCK_MS } from './net/writes';
 import type { SeatCount } from './net/schema';
 import { AppearancePicker } from './components/AppearancePicker';
+import { ChoiceGroup } from './components/controls';
 
 interface Props {
   name: string;
@@ -19,12 +20,23 @@ const CLOCK_CHOICES = [
   { label: '60 min', ms: 60 * 60 * 1000 },
 ];
 
+/**
+ * There are exactly three ways to start playing — open a table, join somebody
+ * else's, or play everyone's seat on this device — so the page is laid out as
+ * those three, with the one that takes decisions given the room to make them
+ * and the two that take a moment kept small beside it.
+ *
+ * Your name comes first because every one of the three needs it, and the
+ * appearance sits last because it is a preference, not a way in.
+ */
 export function Home({ name, onName, onOpen, onHotSeat }: Props) {
   const [code, setCode] = useState('');
   const [seats, setSeats] = useState<SeatCount>(4);
   const [clock, setClock] = useState(DEFAULT_CLOCK_MS);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const named = name.trim().length > 0;
 
   function create() {
     setBusy(true);
@@ -53,9 +65,14 @@ export function Home({ name, onName, onOpen, onHotSeat }: Props) {
         </p>
       </section>
 
-      <div className="home-column">
-      <section className="card">
-        <h2>Play online</h2>
+      <section className="card play-card">
+        <header className="card-head">
+          <h2>Open a table</h2>
+          <p className="hint">
+            You get a room code to read out. Everyone else joins with it.
+          </p>
+        </header>
+
         {!isConfigured && (
           <div className="reject">
             <p>
@@ -79,20 +96,16 @@ export function Home({ name, onName, onOpen, onHotSeat }: Props) {
 
         <div className="field">
           <span className="label">Table</span>
-          <div className="row">
-            <button
-              className={seats === 4 ? 'primary' : ''}
-              onClick={() => setSeats(4)}
-            >
-              4 players
-            </button>
-            <button
-              className={seats === 2 ? 'primary' : ''}
-              onClick={() => setSeats(2)}
-            >
-              2 players
-            </button>
-          </div>
+          <ChoiceGroup
+            label="Table"
+            className="wide"
+            value={String(seats)}
+            onChange={(next) => setSeats(Number(next) as SeatCount)}
+            options={[
+              { id: '4', label: '4 players' },
+              { id: '2', label: '2 players' },
+            ]}
+          />
           <p className="hint">
             {seats === 4
               ? 'Two per side. Teammates alternate turns commanding one army.'
@@ -102,42 +115,41 @@ export function Home({ name, onName, onOpen, onHotSeat }: Props) {
 
         <div className="field">
           <span className="label">Clock, per team</span>
-          <div className="row">
-            {CLOCK_CHOICES.map((choice) => (
-              <button
-                key={choice.ms}
-                className={clock === choice.ms ? 'primary' : ''}
-                onClick={() => setClock(choice.ms)}
-              >
-                {choice.label}
-              </button>
-            ))}
-          </div>
+          <ChoiceGroup
+            label="Clock, per team"
+            className="wide"
+            value={String(clock)}
+            onChange={(next) => setClock(Number(next))}
+            options={CLOCK_CHOICES.map((choice) => ({
+              id: String(choice.ms),
+              label: choice.label,
+            }))}
+          />
         </div>
 
-        <button
-          className="primary big"
-          disabled={busy || !isConfigured || !name.trim()}
-          onClick={create}
-        >
-          Create a room
-        </button>
-        {error && <p className="reject">{error}</p>}
+        <div className="card-foot">
+          <button
+            className="primary big"
+            disabled={busy || !isConfigured || !named}
+            onClick={create}
+          >
+            Create a room
+          </button>
+          {error && <p className="reject">{error}</p>}
+        </div>
       </section>
 
-      <section className="card">
-        <h2>Board &amp; pieces</h2>
-        <AppearancePicker />
-        <p className="hint">Saved in this browser. Change it any time, in a game too.</p>
-      </section>
-      </div>
+      <section className="card join-card">
+        <header className="card-head">
+          <h2>Join a table</h2>
+          <p className="hint">Somebody read you five characters.</p>
+        </header>
 
-      <section className="card">
-        <h2>Join a room</h2>
         <label className="field">
           <span className="label">Room code</span>
           <input
             type="text"
+            className="codeinput"
             value={code}
             placeholder="ABCDE"
             maxLength={8}
@@ -147,22 +159,38 @@ export function Home({ name, onName, onOpen, onHotSeat }: Props) {
             }}
           />
         </label>
-        <button
-          className="primary"
-          disabled={!isValidCode(code) || !isConfigured || !name.trim()}
-          onClick={() => onOpen(normalizeCode(code))}
-        >
-          Join
-        </button>
+
+        <div className="card-foot">
+          <button
+            className="primary"
+            disabled={!isValidCode(code) || !isConfigured || !named}
+            onClick={() => onOpen(normalizeCode(code))}
+          >
+            Join
+          </button>
+        </div>
       </section>
 
-      <section className="card">
-        <h2>Hot seat</h2>
-        <p className="hint">
-          Every seat on one device, no network and no accounts. The same rules
-          layer the online game uses, with the transport taken out.
-        </p>
-        <button onClick={onHotSeat}>Play locally</button>
+      <section className="card local-card">
+        <header className="card-head">
+          <h2>Hot seat</h2>
+          <p className="hint">
+            Every seat on one device, no network and no accounts. The same rules
+            layer the online game uses, with the transport taken out.
+          </p>
+        </header>
+
+        <div className="card-foot">
+          <button onClick={onHotSeat}>Play locally</button>
+        </div>
+      </section>
+
+      <section className="card look-card">
+        <header className="card-head">
+          <h2>Board &amp; pieces</h2>
+          <p className="hint">Saved in this browser. Change it any time, in a game too.</p>
+        </header>
+        <AppearancePicker />
       </section>
     </div>
   );

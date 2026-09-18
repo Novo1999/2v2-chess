@@ -16,8 +16,15 @@ export const GRACE_MS = 25000;
 export const CLOCK_SLOP_MS = 3000;
 /** How long clicking an empty seat holds it against the rest of the table. */
 export const RESERVE_MS = 2000;
-/** One press of the button that hands the other team time. */
-export const GIFT_MS = 15000;
+/**
+ * The amounts one team may hand the other, in ms — 15s, 30s, 1m, 2m, 5m.
+ * Mirrored by GIFT_STEPS in src/net/writes.ts and kept in step by a test.
+ *
+ * A fixed set rather than a range: the validate has to name the permitted
+ * arithmetic outright, and "any amount up to five minutes" would let a client
+ * send 1ms increments that add up to the same thing with none of the intent.
+ */
+export const GIFT_STEPS = [15000, 30000, 60000, 120000, 300000];
 
 // ---------------------------------------------------------------------------
 // Path expressions. `root` is always the PRE-write tree; `newData` is post.
@@ -213,9 +220,13 @@ const opponentSeat = (color) =>
 // The parentheses around `advanced` are load-bearing: `!` binds tighter than
 // `===`, so `!a === b` negates the left operand — a number — rather than the
 // comparison, and the rules compiler rejects it.
+const giftAmount = `(${GIFT_STEPS.map(
+  (ms) => `newData.val() === data.val() + ${ms}`,
+).join(' || ')})`;
+
 const giftTo = (color) =>
   `(${isActive} && !(${advanced(2)}) && data.exists()` +
-  ` && newData.val() === data.val() + ${GIFT_MS} && ${opponentSeat(color)})`;
+  ` && ${giftAmount} && ${opponentSeat(color)})`;
 
 const clockValidate = (color) => {
   const moving = color === 'w' ? whiteToMove : `!${whiteToMove}`;
