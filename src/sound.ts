@@ -1,5 +1,5 @@
 /**
- * Move, capture and check sounds.
+ * Move, capture, check and invitation sounds.
  *
  * Synthesised with Web Audio instead of shipped as recordings: the familiar
  * board sounds from the big chess sites are their own non-free assets, so this
@@ -11,6 +11,7 @@
  *
  * To use recordings instead, put `move.mp3`, `capture.mp3` and `check.mp3` in
  * `public/sounds/`. They are picked up automatically when present.
+ * Invitations use `public/mixkit-message-pop-alert-2354.mp3`.
  */
 
 export type MoveSound = 'move' | 'capture' | 'check';
@@ -121,6 +122,7 @@ export function scheduleKnock(
 
 let context: AudioContext | null = null;
 const recordings = new Map<MoveSound, AudioBuffer | null>();
+let inviteRecording: Promise<AudioBuffer | null> | null = null;
 
 function audio(): AudioContext | null {
   if (typeof window === 'undefined' || typeof window.AudioContext !== 'function') {
@@ -146,6 +148,16 @@ async function loadRecording(ac: AudioContext, kind: MoveSound): Promise<void> {
   }
 }
 
+function loadInviteRecording(ac: AudioContext): Promise<AudioBuffer | null> {
+  inviteRecording ??= fetch('/mixkit-message-pop-alert-2354.mp3')
+    .then(async (res) => {
+      if (!res.ok || !res.headers.get('content-type')?.startsWith('audio/')) return null;
+      return ac.decodeAudioData(await res.arrayBuffer());
+    })
+    .catch(() => null);
+  return inviteRecording;
+}
+
 /**
  * Browsers keep audio suspended until the page has been interacted with. Every
  * player clicks something — a seat, a square — before a move sound matters, so
@@ -162,6 +174,7 @@ export function unlockAudioOnFirstGesture(): void {
     void loadRecording(ac, 'move');
     void loadRecording(ac, 'capture');
     void loadRecording(ac, 'check');
+    void loadInviteRecording(ac);
   };
   window.addEventListener('pointerdown', unlock);
   window.addEventListener('keydown', unlock);
@@ -206,4 +219,23 @@ export function playMoveSound(kind: MoveSound): void {
 
   if (ac.state === 'running') play();
   else void ac.resume().then(play, () => {});
+}
+
+/** Play once when an invitation arrives, using the same unlocked audio context. */
+export function playInviteSound(): void {
+  if (isMuted()) return;
+  const ac = audio();
+  if (!ac) return;
+
+  const requested = performance.now();
+  void Promise.all([loadInviteRecording(ac), ac.resume()]).then(([recording]) => {
+    // If autoplay was blocked, a later click must not play an old notification.
+    if (!recording || isMuted() || performance.now() - requested > 1000) return;
+    const source = ac.createBufferSource();
+    source.buffer = recording;
+    source.connect(ac.destination);
+    source.start();
+  }).catch(() => {
+    /* Audio is optional; the invitation banner still appears. */
+  });
 }

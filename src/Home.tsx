@@ -157,14 +157,6 @@ export function Home({ name, me, onName, onOpen, onHotSeat }: Props) {
       </div>
 
       <div className="home-col">
-      <section className="card look-card">
-        <header className="card-head">
-          <h2>Board &amp; pieces</h2>
-          <p className="hint">Saved in this browser. Change it any time, in a game too.</p>
-        </header>
-        <AppearancePicker />
-      </section>
-
       <section className="card join-card">
         <header className="card-head">
           <h2>Join a table</h2>
@@ -209,6 +201,14 @@ export function Home({ name, me, onName, onOpen, onHotSeat }: Props) {
         <div className="card-foot">
           <button onClick={onHotSeat}>Play locally</button>
         </div>
+      </section>
+
+      <section className="card look-card">
+        <header className="card-head">
+          <h2>Board &amp; pieces</h2>
+          <p className="hint">Saved in this browser. Change it any time, in a game too.</p>
+        </header>
+        <AppearancePicker />
       </section>
       </div>
     </div>

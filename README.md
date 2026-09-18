@@ -67,6 +67,10 @@ Emulator data is thrown away when you stop it.
   see who is about before reading a room code out. Players show under the name
   they typed; anyone who typed none gets a handle their browser mints once and
   keeps, so the list is legible rather than four rows of "Anonymous".
+- Players with a room open show **In a room** in the invite list and cannot be
+  invited elsewhere. They become available after leaving all their room tabs;
+  disconnected tabs are cleaned up by the server. Firebase rules enforce this
+  even if the sender's list has not updated yet.
 - Right-click while dragging a piece to cancel the move and put it back.
 - Online players can select or drag a piece while waiting to queue one premove.
   Both squares turn blue. It plays automatically on your seat's next turn if
@@ -219,6 +223,8 @@ model — a griefing teammate was never defended against (PLAN.md residual #6):
   game, no seat, no history — and exists only while that browser is connected.
   Nobody can write anybody else's entry, and the timestamp is checked against
   `now`, so a client cannot post-date itself to look permanently online.
+- Separate room-presence markers tell signed-in clients whether a player has
+  any room tabs open, without revealing the room code or their seat.
 - Opening the app now signs you in anonymously straight away, rather than at the
   first room you create or join, because being listed needs an identity.
 

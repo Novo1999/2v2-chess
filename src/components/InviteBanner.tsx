@@ -1,5 +1,7 @@
+import { useEffect, useRef } from 'react';
 import { getDb } from '../net/firebase';
 import { dismissInvite, useInvites } from '../net/invites';
+import { playInviteSound } from '../sound';
 
 /**
  * An invitation that arrived. It sits above whatever screen you are on, because
@@ -17,6 +19,25 @@ export function InviteBanner({
   onOpen: (gameId: string) => void;
 }) {
   const invites = useInvites(me);
+  const heard = useRef({ me, versions: new Map<string, string>() });
+
+  useEffect(() => {
+    if (heard.current.me !== me) {
+      heard.current = { me, versions: new Map() };
+    }
+    if (!me) return;
+
+    let arrived = false;
+    for (const invite of invites) {
+      const version = `${invite.game}:${invite.at}`;
+      if (heard.current.versions.get(invite.from) === version) continue;
+      heard.current.versions.set(invite.from, version);
+      arrived = true;
+    }
+    // Dismissing the newest banner can reveal an older invite; it is not new.
+    if (arrived) playInviteSound();
+  }, [me, invites]);
+
   const invite = invites[0];
   if (!me || !invite) return null;
 

@@ -202,11 +202,20 @@
         }
       }
     },
+    "roomPresence": {
+      ".read": "auth != null",
+      "$uid": {
+        "$connection": {
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "newData.val() === true"
+        }
+      }
+    },
     "invites": {
       "$to": {
         ".read": "auth != null && auth.uid === $to",
         "$from": {
-          ".write": "auth != null && ((!newData.exists() && (auth.uid === $to || auth.uid === $from)) || (auth.uid === $from && root.child('games').child(newData.child('game').val()).child('host').val() === auth.uid && root.child('games').child(newData.child('game').val()).child('status').val() === 'lobby'))",
+          ".write": "auth != null && ((!newData.exists() && (auth.uid === $to || auth.uid === $from)) || (auth.uid === $from && root.child('games').child(newData.child('game').val()).child('host').val() === auth.uid && root.child('games').child(newData.child('game').val()).child('status').val() === 'lobby' && !root.child('roomPresence').child($to).exists()))",
           ".validate": "newData.hasChildren(['name','game','at']) && root.child('games').child(newData.child('game').val()).exists()",
           "name": {
             ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 24"

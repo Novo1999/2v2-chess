@@ -496,6 +496,20 @@ const rules = {
     },
 
     /**
+     * Tabs currently inside a room, without exposing which room. Each tab owns
+     * a separate marker so leaving in one cannot make another look available.
+     */
+    roomPresence: {
+      '.read': 'auth != null',
+      $uid: {
+        $connection: {
+          '.write': 'auth != null && auth.uid === $uid',
+          '.validate': 'newData.val() === true',
+        },
+      },
+    },
+
+    /**
      * "Come and play": a room code put into somebody's box.
      *
      * Readable only by its recipient, so an invite is not a second way to
@@ -517,7 +531,8 @@ const rules = {
           '.write':
             `auth != null && ((!newData.exists() && (auth.uid === $to || auth.uid === $from))` +
             ` || (auth.uid === $from && ${invitedGame}.child('host').val() === auth.uid` +
-            ` && ${invitedGame}.child('status').val() === 'lobby'))`,
+            ` && ${invitedGame}.child('status').val() === 'lobby'` +
+            ` && !root.child('roomPresence').child($to).exists()))`,
           '.validate':
             "newData.hasChildren(['name','game','at'])" +
             ` && ${invitedGame}.exists()`,

@@ -94,7 +94,7 @@ function show(live: NetGame, mySlot: Slot | null, uid = mySlot ? UID[mySlot] : '
 
 const seatRow = (slot: Slot) => within(screen.getByText(slot).closest('.seatrow')!);
 const disabled = (button: HTMLElement) => (button as HTMLButtonElement).disabled;
-const hint = () => document.querySelector('.hint')?.textContent ?? '';
+const hint = () => document.querySelector('.lobby > .hint')?.textContent ?? '';
 
 describe('taking a seat', () => {
   it('offers every empty seat to a player with none', () => {

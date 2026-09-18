@@ -5,7 +5,7 @@ import { LocalGame } from './LocalGame';
 import { OnlineGame } from './OnlineGame';
 import { isConfigured } from './net/firebase';
 import { useIdentity } from './net/hooks';
-import { useAnnouncePresence } from './net/presence';
+import { useAnnouncePresence, useRoomPresence } from './net/presence';
 import { displayName } from './names';
 import { InviteBanner } from './components/InviteBanner';
 import { gameHash, parseHash, type Route } from './route';
@@ -28,6 +28,7 @@ export default function App() {
   const identity = useIdentity(isConfigured);
   const me = identity.state === 'ready' ? identity.value : null;
   useAnnouncePresence(me, displayName(name));
+  useRoomPresence(me, route.at === 'game');
 
   useEffect(() => {
     const onChange = () => setRoute(parseHash(window.location.hash));
@@ -53,16 +54,21 @@ export default function App() {
     <Tooltip.Provider delay={350}>
       <div className="app">
       <header className="topbar">
+        <div className="topbar-meta">
+          <a href="#" className="brand" aria-label="Chesspacito home" onClick={() => go('')}>
+            <img className="brand-logo" src="/favicon.svg" alt="" width={36} height={36} />
+          </a>
+          {route.at !== 'home' && (
+            <span className="sub">
+              {route.at === 'local' ? 'hot seat' : route.id}
+            </span>
+          )}
+        </div>
         <h1>
           <a href="#" className="brand" onClick={() => go('')}>
-            <img className="brand-logo" src="/favicon.svg" alt="" width={30} height={30} />
             Chesspacito
           </a>
         </h1>
-        <span className="sub">
-          {route.at === 'local' ? 'hot seat' : route.at === 'game' ? route.id : '2v2'}
-        </span>
-        <span className="spacer" />
         {route.at !== 'home' && (
           <button className="home-button" onClick={() => go('')}>
             <svg viewBox="0 0 24 24" aria-hidden="true">

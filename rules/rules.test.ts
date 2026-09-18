@@ -673,6 +673,7 @@ describe('the game node itself', () => {
   it('lets a signed-in player create a game', async () => {
     await assertSucceeds(
       set(ref(as('P1'), `games/NEWONE`), {
+        host: UID.P1,
         fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
         turnIndex: 0,
         toMove: 'P1',
@@ -694,6 +695,7 @@ describe('the game node itself', () => {
     await seed();
     await assertFails(
       set(ref(as('P1'), `games/${GID}`), {
+        host: UID.P1,
         fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
         turnIndex: 0,
         toMove: 'P1',
@@ -717,7 +719,7 @@ describe('the game node itself', () => {
     await assertFails(set(ref(as('P1'), `games/${GID}/backdoor`), true));
   });
 
-  it('refuses writes anywhere outside the five known roots', async () => {
+  it('refuses writes anywhere outside the known roots', async () => {
     await assertFails(set(ref(as('P1'), 'somewhere/else'), true));
   });
 });
@@ -1122,6 +1124,29 @@ describe('who is online', () => {
   });
 });
 
+describe('room availability', () => {
+  it('lets a player mark a room tab and lets signed-in players see it', async () => {
+    await assertSucceeds(set(ref(as('P1'), `roomPresence/${UID.P1}/tab-a`), true));
+    const snap = await assertSucceeds(get(ref(as('P3'), 'roomPresence')));
+    expect(snap.val()).toEqual({ [UID.P1]: { 'tab-a': true } });
+    await assertFails(get(ref(asAnon(), 'roomPresence')));
+  });
+
+  it('refuses changing another player\'s availability', async () => {
+    const path = `roomPresence/${UID.P3}/tab-a`;
+    await assertFails(set(ref(as('P1'), path), true));
+    await assertSucceeds(set(ref(as('P3'), path), true));
+    await assertFails(set(ref(as('P1'), path), null));
+  });
+
+  it('only accepts a true marker, without a room code or other data', async () => {
+    const node = ref(as('P1'), `roomPresence/${UID.P1}/tab-a`);
+    await assertFails(set(node, false));
+    await assertFails(set(node, GID));
+    await assertFails(set(node, { room: GID }));
+  });
+});
+
 describe('inviting somebody to a room', () => {
   const invite = (game = GID) => ({ name: 'Sigma Yapper', game, at: { '.sv': 'timestamp' } });
   const box = (to: Slot, from: Slot) => `invites/${UID[to]}/${UID[from]}`;
@@ -1129,6 +1154,32 @@ describe('inviting somebody to a room', () => {
   it('lets the host invite while the table is still being settled', async () => {
     await seed({ status: 'lobby', host: UID.P1, fill: ['P1'] });
     await assertSucceeds(set(ref(as('P1'), box('P3', 'P1')), invite()));
+  });
+
+  it('refuses inviting somebody who already has a room open', async () => {
+    await seed({ status: 'lobby', host: UID.P1, fill: ['P1'] });
+    await assertSucceeds(set(ref(as('P3'), `roomPresence/${UID.P3}/tab-a`), true));
+    await assertFails(set(ref(as('P1'), box('P3', 'P1')), invite()));
+  });
+
+  it('only allows inviting again once the last room tab has left', async () => {
+    await seed({ status: 'lobby', host: UID.P1, fill: ['P1'] });
+    const first = ref(as('P3'), `roomPresence/${UID.P3}/tab-a`);
+    const second = ref(as('P3'), `roomPresence/${UID.P3}/tab-b`);
+    await assertSucceeds(set(first, true));
+    await assertSucceeds(set(second, true));
+    await assertSucceeds(set(first, null));
+    await assertFails(set(ref(as('P1'), box('P3', 'P1')), invite()));
+    await assertSucceeds(set(second, null));
+    await assertSucceeds(set(ref(as('P1'), box('P3', 'P1')), invite()));
+  });
+
+  it('still lets either party dismiss an invite after the recipient enters a room', async () => {
+    await seed({ status: 'lobby', host: UID.P1, fill: ['P1'] });
+    await assertSucceeds(set(ref(as('P1'), box('P3', 'P1')), invite()));
+    await assertSucceeds(set(ref(as('P3'), `roomPresence/${UID.P3}/tab-a`), true));
+    await assertSucceeds(set(ref(as('P3'), box('P3', 'P1')), null));
+    await assertSucceeds(set(ref(as('P1'), box('P3', 'P1')), null));
   });
 
   it('lets the invited player read their own box', async () => {

@@ -15,6 +15,7 @@
 import {
   onDisconnect,
   onValue,
+  push,
   ref,
   remove,
   serverTimestamp,
@@ -39,6 +40,8 @@ export interface OnlinePlayer {
   uid: string;
   name: string;
   at: number;
+  /** True while any of this player's tabs has a room open. */
+  inRoom?: boolean;
 }
 
 export interface Announcement {
@@ -86,28 +89,61 @@ export function publishPresence(
 
 /** Announce this tab for as long as it is signed in, and keep the name current. */
 export function useAnnouncePresence(uid: string | null, name: string): void {
-  const latest = useRef(name);
-  latest.current = name;
+  const publishedName = useRef(name);
   const announce = useRef<() => void>(() => {});
 
   useEffect(() => {
     if (!uid) return;
-    const handle = publishPresence(getDb(), uid, () => latest.current);
+    const handle = publishPresence(getDb(), uid, () => publishedName.current);
     announce.current = handle.announce;
     return handle.stop;
   }, [uid]);
 
-  // A name edit is a keystroke at a time; the list only needs the result.
+  // Wait three seconds after typing stops. Heartbeats and reconnects keep using
+  // the published name so they cannot expose an edit before the debounce ends.
   useEffect(() => {
     if (!uid) return;
-    const id = setTimeout(() => announce.current(), 600);
+    const id = setTimeout(() => {
+      publishedName.current = name;
+      announce.current();
+    }, 3000);
     return () => clearTimeout(id);
   }, [uid, name]);
+}
+
+/**
+ * One marker per tab that has a room open. Keeping these separate from the
+ * heartbeat means another tab on the home screen cannot clear this one's room.
+ * The marker carries no room code and is removed on leaving or disconnecting.
+ */
+export function useRoomPresence(uid: string | null, inRoom: boolean): void {
+  useEffect(() => {
+    if (!uid || !inRoom) return;
+    const db = getDb();
+    const node = push(ref(db, `roomPresence/${uid}`));
+    const gone = onDisconnect(node);
+    let stopped = false;
+
+    const unsubscribe = onValue(ref(db, '.info/connected'), (snap) => {
+      if (snap.val() !== true) return;
+      void gone.remove().then(() => {
+        if (!stopped) return set(node, true);
+      }).catch(() => {});
+    });
+
+    return () => {
+      stopped = true;
+      unsubscribe();
+      void gone.cancel().catch(() => {});
+      void remove(node).catch(() => {});
+    };
+  }, [uid, inRoom]);
 }
 
 /** Everyone currently announced, most recently seen first. */
 export function useOnlinePlayers(enabled: boolean): OnlinePlayer[] {
   const [players, setPlayers] = useState<OnlinePlayer[]>([]);
+  const [rooms, setRooms] = useState<Record<string, Record<string, true>>>({});
 
   useEffect(() => {
     if (!enabled) return;
@@ -125,7 +161,14 @@ export function useOnlinePlayers(enabled: boolean): OnlinePlayer[] {
     });
   }, [enabled]);
 
-  return players;
+  useEffect(() => {
+    if (!enabled) return;
+    return onValue(ref(getDb(), 'roomPresence'), (snap) => {
+      setRooms(snap.val() ?? {});
+    });
+  }, [enabled]);
+
+  return players.map((player) => ({ ...player, inRoom: Boolean(rooms[player.uid]) }));
 }
 
 /**

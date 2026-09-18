@@ -55,7 +55,7 @@ export function InvitePanel({
             <span className="online-name">{player.name}</span>
             <button
               className="seat-action"
-              disabled={sent[player.uid]}
+              disabled={player.inRoom || sent[player.uid]}
               onClick={() => {
                 setError(null);
                 sendInvite(getDb(), me, myName, player.uid, gameId).then(
@@ -64,7 +64,7 @@ export function InvitePanel({
                 );
               }}
             >
-              {sent[player.uid] ? 'Invited' : 'Invite'}
+              {player.inRoom ? 'In a room' : sent[player.uid] ? 'Invited' : 'Invite'}
             </button>
           </li>
         ))}
