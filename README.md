@@ -39,6 +39,25 @@ Emulator data is thrown away when you stop it.
   back in a different browser and you get your seat back — see decision #8.
 - If somebody drops, their teammate can play their turn after ~25 seconds. The
   team clock never pauses.
+
+### When you are not four
+
+- **Three players is a real game.** Start with a seat empty and the rotation
+  still lands on it — the remaining teammate plays that turn, with no waiting,
+  because nobody is coming back to a seat nobody took. The Start button says
+  **Start a man down** when that is what it will do. Each army needs at least
+  one player; that is the only requirement.
+- **A latecomer drops straight in.** An empty seat stays open for the whole
+  game, and **Open seats** in the side panel puts whoever turns up into it
+  mid-game. A seated player can use it to move across the table too.
+- **Clicking an empty seat holds it for two seconds**, so two people reaching
+  for the same one see it greyed out as *Being taken…* rather than both
+  clicking and one of them losing. The hold expires on its own.
+- **Swapping seats** with somebody who already has one needs both of you to
+  agree, the same way a draw does, and is a lobby-only move — once the clocks
+  start, a swap would hand a player the other side's position mid-game.
+- **+15s to the other team**, as on chess.com, is in the side panel during a
+  game. Always to your opponents, never to yourself, as often as you like.
 - Right-click while dragging a piece to cancel the move and put it back.
 - Online players can select or drag a piece while waiting to queue one premove.
   Both squares turn blue. It plays automatically on your seat's next turn if
@@ -124,6 +143,13 @@ turn, reusing a `turnIndex`, editing or deleting a logged move, backdating a
 timestamp, inflating a clock, claiming an occupied seat, reclaiming with the
 wrong secret, reading the secrets node, and resigning without your teammate.
 
+It also covers the seat and clock changes above: vacating somebody else's seat,
+claiming a seat under another player's hold, post-dating a hold so it never
+expires, settling a seat swap with one signature, smuggling an unrelated uid
+into a seat under an agreed swap, swapping once the clocks are running, gifting
+time to your own army, and bolting fifteen seconds onto your own clock while
+playing a move.
+
 ## Layout
 
 ```
@@ -146,6 +172,16 @@ clocks, seats and consent are enforced; **board legality is enforced only by the
 client.** That is the deliberate trade in PLAN.md decision #5 — correct for a
 game among friends, not for a game among strangers.
 
+Two smaller ones came with the features above, both inside the same threat
+model — a griefing teammate was never defended against (PLAN.md residual #6):
+
+- Anybody seated can hand the opponents fifteen seconds, over and over. It can
+  only ever cost their own side the game, so rules cap the amount per press but
+  not the number of presses.
+- Anybody signed in can hold an empty seat for two seconds at a time. Holding it
+  shut means renewing that forever, and it never takes a seat off somebody who
+  is already sitting in it.
+
 ## Artwork
 
 | In the app | Source | License |
@@ -159,3 +195,19 @@ game among friends, not for a game among strangers.
 Each piece folder under `src/assets/pieces/` carries its own credit file. The
 generated artwork is committed; re-run `npm run pieces:wood` or
 `npm run board:grain` after changing either script.
+
+## Openings
+
+The move list names the opening — `C50 Italian Game` — from
+[lichess-org/chess-openings](https://github.com/lichess-org/chess-openings)
+(CC0), 3810 named lines.
+
+`npm run openings` regenerates `src/game/openings.data.json` from that source.
+It replays each line and stores the **position** it reaches rather than the
+moves, so transpositions are recognised: `1.d4 d5 2.e4 e6` is named the French
+just as `1.e4 e6 2.d4 d5` is. The table is 59KB gzipped and is fetched on
+demand rather than bundled, so the name appears a moment after the board.
+
+Sound works the same way: drop `move.mp3`, `capture.mp3` or `check.mp3` into
+`public/sounds/` and they replace the synthesised knocks, with no code change.
+Nothing is committed there, so the app ships with the synthesised set.

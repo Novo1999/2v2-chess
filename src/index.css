@@ -782,3 +782,54 @@ button.big { padding: 10px; }
 .player-row.offline { border-style: dashed; border-color: rgba(248, 113, 113, 0.45); }
 .seat .presence { margin-left: 0; }
 .occupant .presence { margin-left: 2px; }
+
+/* ---- short-handed tables, seat trades, and time given away ---- */
+
+/* A seat somebody is in the middle of taking. Deliberately quiet: it is a
+   two-second state, and it should read as "wait" rather than as an error. */
+.occupant.taking {
+  color: var(--muted);
+  font-weight: 400;
+  font-style: italic;
+}
+
+.seat-action { font-size: 12px; padding: 3px 8px; }
+
+.givetime {
+  width: 100%;
+  font-size: 12px;
+  border-color: #2f5540;
+  color: #9fe0b8;
+}
+.givetime:hover:not(:disabled) { background: rgba(80, 200, 130, 0.14); }
+
+.openseats { display: flex; flex-direction: column; gap: 4px; }
+.openseats button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 12px;
+}
+
+/* The opening, above the move list. It sits in the panel's quiet register —
+   it is a caption for the game, not a thing to be clicked. */
+.opening {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--muted);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.opening .eco {
+  flex: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  color: var(--text);
+}

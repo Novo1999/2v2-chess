@@ -14,6 +14,10 @@ import { writeFileSync } from 'node:fs';
 export const GRACE_MS = 25000;
 /** Latency and clock-skew allowance on a client-computed clock decrement. */
 export const CLOCK_SLOP_MS = 3000;
+/** How long clicking an empty seat holds it against the rest of the table. */
+export const RESERVE_MS = 2000;
+/** One press of the button that hands the other team time. */
+export const GIFT_MS = 15000;
 
 // ---------------------------------------------------------------------------
 // Path expressions. `root` is always the PRE-write tree; `newData` is post.
@@ -24,8 +28,10 @@ const field = (name) => `${G}.child('${name}').val()`;
 
 const toMove = field('toMove');
 const status = field('status');
-const seats = field('seats');
 const lastMoveAt = field('lastMoveAt');
+
+const isLobby = `${status} === 'lobby'`;
+const isActive = `${status} === 'active'`;
 
 /** The seat that follows `slot` in the rotation. */
 const next = (slot) => `${G}.child('rotation').child(${slot}).val()`;
@@ -39,6 +45,8 @@ const teammate = (slot) => next(next(slot));
 
 const uidOf = (slot) => `${G}.child('players').child(${slot}).child('uid').val()`;
 const holds = (slot) => `${uidOf(slot)} === auth.uid`;
+const occupied = (slot) => `${G}.child('players').child(${slot}).child('uid').exists()`;
+const vacant = (slot) => `!${occupied(slot)}`;
 const absent = (slot) =>
   `(${G}.child('players').child(${slot}).child('connected').val() === false` +
   ` && now - ${G}.child('players').child(${slot}).child('lastSeen').val() > ${GRACE_MS})`;
@@ -46,11 +54,20 @@ const absent = (slot) =>
 const q = (slot) => `'${slot}'`;
 const seated = `(${['P1', 'P2', 'P3', 'P4'].map((s) => holds(q(s))).join(' || ')})`;
 
-/** Decision #1 + #10: the seat on move, or its teammate once the grace lapses. */
-const mayMove = `(${holds(toMove)} || (${absent(toMove)} && ${holds(teammate(toMove))}))`;
+/**
+ * Decision #1 + #10, plus short-handed play: the seat on move, or its teammate
+ * once the grace lapses.
+ *
+ * An EMPTY seat on move needs no grace period. The grace exists to give a
+ * player who dropped the chance to come back to a turn that is theirs; nobody
+ * is coming back to a seat nobody ever took, and a team playing a man down
+ * would otherwise burn 25 seconds of its shared clock on every single turn.
+ */
+const mayMove =
+  `(${holds(toMove)}` +
+  ` || ((${vacant(toMove)} || ${absent(toMove)}) && ${holds(teammate(toMove))}))`;
 
 const whiteToMove = `(${toMove} === 'P1' || ${toMove} === 'P2')`;
-const isActive = `${status} === 'active'`;
 
 /**
  * Decision #5's core assertion, read from a sibling of turnIndex. Every field a
@@ -64,11 +81,18 @@ const advanced = (depth) => {
 
 const elapsed = `(now - ${lastMoveAt})`;
 
-const allSeatsFilled =
-  `${G}.child('players').child('P1').child('uid').exists()` +
-  ` && ${G}.child('players').child('P3').child('uid').exists()` +
-  ` && (${seats} === 2 || (${G}.child('players').child('P2').child('uid').exists()` +
-  ` && ${G}.child('players').child('P4').child('uid').exists()))`;
+/**
+ * A team needs one player, not two. Four friends become three when somebody
+ * cannot make it, and the game they wanted is still playable — the remaining
+ * teammate simply plays both of that army's turns (see `mayMove`). A seat left
+ * open here can still be filled later, mid-game.
+ */
+const armyManned = (color) =>
+  color === 'w'
+    ? `(${occupied(q('P1'))} || ${occupied(q('P2'))})`
+    : `(${occupied(q('P3'))} || ${occupied(q('P4'))})`;
+
+const canStart = `${armyManned('w')} && ${armyManned('b')}`;
 
 /** The side to move has burned more wall-clock than it had left. */
 const flagged = `${elapsed} >= ${G}.child('clocks').child(${whiteToMove} ? 'w' : 'b').val()`;
@@ -76,13 +100,20 @@ const flagged = `${elapsed} >= ${G}.child('clocks').child(${whiteToMove} ? 'w' :
 // --- consent (decision #3) -------------------------------------------------
 
 const offer = (name) => `${G}.child('offer').child('${name}').val()`;
-const accepted = (slot) =>
-  `${G}.child('offer').child('accept').child('${slot}').val() === true`;
-const soloArmy = `${seats} === 2`;
+const acceptedBy = (slot) =>
+  `${G}.child('offer').child('accept').child(${slot}).val() === true`;
+
+/**
+ * An empty seat cannot withhold consent — it would make conceding impossible
+ * for a team playing a man down. `armyManned` is what stops that from
+ * collapsing into "an army with nobody in it agrees to anything".
+ */
+const agreedOrEmpty = (slot) => `(${acceptedBy(q(slot))} || ${vacant(q(slot))})`;
+
 const armyAccepted = (color) =>
   color === 'w'
-    ? `(${accepted('P1')} && (${soloArmy} || ${accepted('P2')}))`
-    : `(${accepted('P3')} && (${soloArmy} || ${accepted('P4')}))`;
+    ? `(${armyManned('w')} && ${agreedOrEmpty('P1')} && ${agreedOrEmpty('P2')})`
+    : `(${armyManned('b')} && ${agreedOrEmpty('P3')} && ${agreedOrEmpty('P4')})`;
 
 /** Resignation needs the whole resigning army; a draw needs everyone. */
 const resignAgreed =
@@ -91,6 +122,37 @@ const resignAgreed =
 const drawAgreed =
   `(${offer('kind')} === 'draw' && ${armyAccepted('w')} && ${armyAccepted('b')})`;
 
+/**
+ * Trading seats — decision #3's machinery pointed at a third thing. Both named
+ * seats have signed, so the exchange is a single update that either lands whole
+ * or not at all: no window in which one player has stood up and the other has
+ * not yet sat down.
+ */
+const swapAgreed =
+  `(${offer('kind')} === 'swap'` +
+  ` && ${acceptedBy(offer('by'))} && ${acceptedBy(offer('with'))})`;
+
+/**
+ * Writing `$slot` as one half of an agreed swap. The uid written must be
+ * exactly the counterpart seat's current holder, which is what keeps this from
+ * becoming a general "put anyone anywhere" grant.
+ *
+ * Lobby only: the table is settled before the clocks start, and a swap mid-game
+ * would hand a player the other side's position with their clock running.
+ *
+ * `incomingUid` is passed in rather than hardcoded because this predicate is
+ * used at two different depths, where `newData` means two different things: the
+ * whole seat node on the `.write`, and the bare uid string on its `.validate`.
+ */
+const swapInto = (slot, incomingUid) =>
+  `(${isLobby} && ${seated} && ${swapAgreed}` +
+  ` && (${slot} === ${offer('by')} || ${slot} === ${offer('with')})` +
+  ` && ${incomingUid} ===` +
+  ` ${uidOf(`(${slot} === ${offer('by')} ? ${offer('with')} : ${offer('by')})`)})`;
+
+const SEAT_NODE_UID = "newData.child('uid').val()";
+const BARE_UID = 'newData.val()';
+
 // --- seat claims (decisions #8, #9) ----------------------------------------
 
 const secretVal = `root.child('secrets').child($gid).child($slot).val()`;
@@ -98,9 +160,32 @@ const provenSecret =
   `(root.child('secrets').child($gid).child($slot).exists()` +
   ` && root.child('proof').child($gid).child(auth.uid).child($slot).val() === ${secretVal})`;
 
+/**
+ * The two-second hold. Claiming was always race-safe — the loser's write simply
+ * failed — but "somebody else got there first" is a worse thing to learn after
+ * clicking than before, so a click reserves the seat and every other client
+ * greys it out. The reservation expires on its own, so a client that dies
+ * mid-claim cannot wedge a seat shut.
+ */
+const reserveAt = (slot) => `${G}.child('reserve').child(${slot}).child('at')`;
+const reservedLive = (slot) =>
+  `(${reserveAt(slot)}.exists() && now - ${reserveAt(slot)}.val() < ${RESERVE_MS})`;
+const reservedByMe = (slot) =>
+  `${G}.child('reserve').child(${slot}).child('uid').val() === auth.uid`;
+const reserveClear = (slot) => `(!${reservedLive(slot)} || ${reservedByMe(slot)})`;
+
 const claimable =
-  `(!${G}.child('players').child($slot).child('uid').exists()` +
-  ` && !root.child('secrets').child($gid).child($slot).exists())`;
+  `(${vacant('$slot')}` +
+  ` && !root.child('secrets').child($gid).child($slot).exists()` +
+  ` && ${reserveClear('$slot')})`;
+
+/**
+ * Standing up. Only ever your own seat, and the secret goes with it — the pair
+ * keeps the invariant the claim rule leans on, that a secret exists for exactly
+ * the seats somebody is sitting in. A seat vacated with its secret left behind
+ * would be unclaimable by anyone, including the player who just left it.
+ */
+const vacating = `(!newData.exists() && ${holds('$slot')})`;
 
 const SLOT_ENUM =
   "newData.val() === 'P1' || newData.val() === 'P2'" +
@@ -110,10 +195,32 @@ const RESULT_ENUM =
 
 // ---------------------------------------------------------------------------
 
+/**
+ * Handing the other team fifteen seconds. Always to the opponent, never to
+ * yourself: `opponentSeat` is the whole of that guarantee, and it is why no
+ * limit on how often is needed — the button can only ever cost you the game.
+ *
+ * `!advanced(2)` keeps it off a move update. Without it the two branches of
+ * this validate would combine into "a mover may add 15s to their own clock
+ * while advancing the turn", which is the one thing the decrement window exists
+ * to prevent.
+ */
+const opponentSeat = (color) =>
+  color === 'w'
+    ? `(${holds(q('P3'))} || ${holds(q('P4'))})`
+    : `(${holds(q('P1'))} || ${holds(q('P2'))})`;
+
+// The parentheses around `advanced` are load-bearing: `!` binds tighter than
+// `===`, so `!a === b` negates the left operand — a number — rather than the
+// comparison, and the rules compiler rejects it.
+const giftTo = (color) =>
+  `(${isActive} && !(${advanced(2)}) && data.exists()` +
+  ` && newData.val() === data.val() + ${GIFT_MS} && ${opponentSeat(color)})`;
+
 const clockValidate = (color) => {
   const moving = color === 'w' ? whiteToMove : `!${whiteToMove}`;
   return (
-    `newData.isNumber() && newData.val() >= 0 && (!data.exists() || ` +
+    `newData.isNumber() && newData.val() >= 0 && (!data.exists() || ${giftTo(color)} || ` +
     `(${moving}` +
     ` ? (newData.val() <= data.val() - ${elapsed} + ${CLOCK_SLOP_MS}` +
     ` && newData.val() >= data.val() - ${elapsed} - ${CLOCK_SLOP_MS})` +
@@ -121,10 +228,13 @@ const clockValidate = (color) => {
   );
 };
 
+const clockWrite = (color) =>
+  `auth != null && (${advanced(2)} || (${seated} && ${giftTo(color)}))`;
+
 const statusWrite =
   `auth != null && ${seated} && (` +
-  // lobby -> active, once every seat this game needs is taken
-  `(${status} === 'lobby' && newData.val() === 'active' && ${allSeatsFilled})` +
+  // lobby -> active, once each army has somebody in it
+  `(${isLobby} && newData.val() === 'active' && ${canStart})` +
   // an outcome asserted alongside a legal turn advance (the accepted risk:
   // rules cannot run chess.js, so 'checkmate' is taken on trust)
   ` || (${isActive} && ${advanced(1)} && (newData.val() === 'active'` +
@@ -135,6 +245,9 @@ const statusWrite =
   // consent
   ` || (${isActive} && newData.val() === 'resigned' && ${resignAgreed})` +
   ` || (${isActive} && newData.val() === 'draw' && ${drawAgreed}))`;
+
+/** Offers are opened in the lobby (swap) or in play (resign, draw). */
+const offerWrite = `auth != null && ${seated} && (${isActive} || ${isLobby})`;
 
 const rules = {
   rules: {
@@ -176,13 +289,13 @@ const rules = {
           // so the first clock tick has something to measure from.
           '.write':
             `auth != null && (${advanced(1)}` +
-            ` || (${status} === 'lobby' && newData.parent().child('status').val() === 'active'))`,
+            ` || (${isLobby} && newData.parent().child('status').val() === 'active'))`,
           '.validate': 'newData.val() === now',
         },
 
         clocks: {
-          w: { '.write': `auth != null && ${advanced(2)}`, '.validate': clockValidate('w') },
-          b: { '.write': `auth != null && ${advanced(2)}`, '.validate': clockValidate('b') },
+          w: { '.write': clockWrite('w'), '.validate': clockValidate('w') },
+          b: { '.write': clockWrite('b'), '.validate': clockValidate('b') },
           $other: { '.validate': false },
         },
 
@@ -229,10 +342,17 @@ const rules = {
         players: {
           $slot: {
             '.write':
-              'auth != null && newData.child(\'uid\').val() === auth.uid && (' +
-              `${claimable} || ${holds('$slot')} || ${provenSecret})`,
+              `auth != null && (${vacating}` +
+              ` || (newData.child('uid').val() === auth.uid` +
+              ` && (${claimable} || ${holds('$slot')} || ${provenSecret}))` +
+              ` || ${swapInto('$slot', SEAT_NODE_UID)})`,
             '.validate': "newData.hasChildren(['uid','connected','lastSeen'])",
-            uid: { '.validate': 'newData.val() === auth.uid' },
+            // Normally your own uid and nobody else's. The exception is the
+            // settling half of an agreed swap, where one client writes both
+            // seats at once and each carries the other player's uid.
+            uid: {
+              '.validate': `newData.val() === auth.uid || ${swapInto('$slot', BARE_UID)}`,
+            },
             name: { '.validate': 'newData.isString() && newData.val().length <= 24' },
             // Presence writes, including the onDisconnect that fires with no
             // client left to run it. Scoped so a heartbeat need not re-prove.
@@ -248,25 +368,37 @@ const rules = {
           },
         },
 
+        // Advisory, self-expiring, and never the thing that actually decides a
+        // contested seat — `claimable` still does that.
+        reserve: {
+          $slot: {
+            '.write':
+              `auth != null && ((!newData.exists() && ${reservedByMe('$slot')})` +
+              ` || (${vacant('$slot')} && ${reserveClear('$slot')}))`,
+            '.validate': "newData.hasChildren(['uid','at'])",
+            uid: { '.validate': 'newData.val() === auth.uid' },
+            at: { '.validate': 'newData.val() === now' },
+            $other: { '.validate': false },
+          },
+        },
+
         offer: {
           // No .write here: granting it would cascade onto `accept` and let an
           // offerer forge their opponents' consent in the same update.
           kind: {
-            '.write': `auth != null && ${seated} && ${isActive}`,
-            '.validate': "newData.val() === 'resign' || newData.val() === 'draw'",
+            '.write': offerWrite,
+            '.validate':
+              "newData.val() === 'resign' || newData.val() === 'draw'" +
+              " || newData.val() === 'swap'",
           },
           army: {
-            '.write': `auth != null && ${seated} && ${isActive}`,
+            '.write': offerWrite,
             '.validate': "newData.val() === 'w' || newData.val() === 'b'",
           },
-          by: {
-            '.write': `auth != null && ${seated} && ${isActive}`,
-            '.validate': SLOT_ENUM,
-          },
-          at: {
-            '.write': `auth != null && ${seated} && ${isActive}`,
-            '.validate': 'newData.val() === now',
-          },
+          by: { '.write': offerWrite, '.validate': SLOT_ENUM },
+          // The counterpart seat of a swap. Unused by resign and draw.
+          with: { '.write': offerWrite, '.validate': SLOT_ENUM },
+          at: { '.write': offerWrite, '.validate': 'newData.val() === now' },
           accept: {
             $slot: {
               // Set only by the seat's own holder — a takeover does not get to
@@ -294,9 +426,12 @@ const rules = {
     secrets: {
       $gid: {
         $slot: {
-          // Write-once, and only by whoever already holds the seat, so nobody
-          // can mint a secret for a seat they do not occupy and lock it shut.
-          '.write': `auth != null && !data.exists() && ${holds('$slot')}`,
+          // Only ever by whoever holds the seat right now, which is the whole
+          // of the protection: to hold a seat you either found it empty or
+          // proved this very secret. That a holder may also REPLACE it is what
+          // lets a swapped-in player take ownership of their new seat, and
+          // clear it on the way out.
+          '.write': `auth != null && ${holds('$slot')}`,
           '.validate': 'newData.isString() && newData.val().length >= 20',
         },
       },

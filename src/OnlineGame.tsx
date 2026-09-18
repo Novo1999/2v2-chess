@@ -5,18 +5,29 @@ import { SLOT_COLOR } from './game/types';
 import { getDb } from './net/firebase';
 import { useConnected, useGame, useServerNow, useTick } from './net/hooks';
 import type { NetGame } from './net/schema';
-import { seatsOf, teammateIn, toGameState } from './net/schema';
+import {
+  emptySeats,
+  isSeatFilled,
+  seatsOf,
+  teammateIn,
+  toGameState,
+} from './net/schema';
 import {
   claimSeat,
   forgetSeat,
+  moveToSeat,
   recallSeat,
   reclaimSeat,
+  remintSecret,
   trackPresence,
+  vacateSeat,
 } from './net/seat';
 import {
   clearOfferUpdate,
   clockNow,
   consentComplete,
+  giftTarget,
+  giftUpdate,
   hasFlagged,
   mayMoveNow,
   moveUpdate,
@@ -24,6 +35,8 @@ import {
   seatOfUid,
   settleOfferUpdate,
   startUpdate,
+  swapOfferFields,
+  swapSettleUpdate,
   takeoverIn,
   timeoutUpdate,
 } from './net/writes';
@@ -59,6 +72,8 @@ export function OnlineGame({ gameId, uid, name, onName, onLeave }: Props) {
   usePresence(gameId, mySlot);
   useFlagCaller(gameId, game, mySlot, serverNow);
   useConsentSettler(gameId, game, mySlot);
+  useSwapSettler(gameId, game, mySlot);
+  useSecretAfterSwap(gameId, mySlot);
 
   const write = useCallback(
     async (payload: Record<string, unknown>) => {
@@ -76,6 +91,18 @@ export function OnlineGame({ gameId, uid, name, onName, onLeave }: Props) {
     },
     [gameId],
   );
+
+  /**
+   * Seat changes are promises over several paths rather than one update object,
+   * so they get their own runner alongside `write`.
+   */
+  const seatOp = useCallback((run: () => Promise<unknown>) => {
+    setBusy(true);
+    setError(null);
+    run()
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setBusy(false));
+  }, []);
 
   const onMove = useCallback(
     (intent: MoveIntent) => {
@@ -111,6 +138,7 @@ export function OnlineGame({ gameId, uid, name, onName, onLeave }: Props) {
   }
 
   const live = loaded.value;
+  const now = serverNow();
 
   if (live.status === 'lobby') {
     return (
@@ -120,16 +148,28 @@ export function OnlineGame({ gameId, uid, name, onName, onLeave }: Props) {
           gameId={gameId}
           game={live}
           mySlot={mySlot}
+          uid={uid}
+          now={now}
           name={name}
           onName={onName}
           busy={busy}
-          onClaim={(slot) => {
-            setBusy(true);
-            setError(null);
-            claimSeat(getDb(), gameId, slot, uid, name.trim())
-              .catch((err: Error) => setError(err.message))
-              .finally(() => setBusy(false));
-          }}
+          onClaim={(slot) =>
+            seatOp(() => claimSeat(getDb(), gameId, slot, uid, name.trim()))
+          }
+          onMoveSeat={(slot) =>
+            mySlot &&
+            seatOp(() => moveToSeat(getDb(), gameId, mySlot, slot, uid, name.trim()))
+          }
+          onLeaveSeat={() =>
+            mySlot && seatOp(() => vacateSeat(getDb(), gameId, mySlot))
+          }
+          onProposeSwap={(withSlot) =>
+            mySlot && void write(proposeSwap(mySlot, withSlot))
+          }
+          onAcceptSwap={() =>
+            mySlot && void write({ [`offer/accept/${mySlot}`]: true })
+          }
+          onDeclineSwap={() => void write(clearOfferUpdate(seatsOf(live)))}
           onStart={() => void write(startUpdate())}
           onLeave={onLeave}
         />
@@ -137,7 +177,6 @@ export function OnlineGame({ gameId, uid, name, onName, onLeave }: Props) {
     );
   }
 
-  const now = serverNow();
   const canMove = mayMoveNow(live, uid, now);
   const orientation = mySlot ? SLOT_COLOR[mySlot] : 'w';
   const offer = live.offer?.kind ? live.offer : null;
@@ -177,6 +216,24 @@ export function OnlineGame({ gameId, uid, name, onName, onLeave }: Props) {
                 sharedBy={armyLabel(live, 'w')}
               />
             </div>
+            <GiveTime
+              game={live}
+              uid={uid}
+              busy={busy}
+              onGive={(army) => void write(giftUpdate(live, army))}
+            />
+            <OpenSeats
+              game={live}
+              mySlot={mySlot}
+              busy={busy}
+              onTake={(slot) =>
+                seatOp(() =>
+                  mySlot
+                    ? moveToSeat(getDb(), gameId, mySlot, slot, uid, name.trim())
+                    : claimSeat(getDb(), gameId, slot, uid, name.trim()),
+                )
+              }
+            />
             <div className="roomcode small">
               <span className="label">Room</span>
               <code>{gameId}</code>
@@ -258,11 +315,76 @@ function propose(kind: 'draw' | 'resign', by: Slot): Record<string, unknown> {
   return { ...offerFields(kind, by), [`offer/accept/${by}`]: true };
 }
 
+/** The same, for a seat trade: proposing one is signing it. */
+function proposeSwap(by: Slot, withSlot: Slot): Record<string, unknown> {
+  return { ...swapOfferFields(by, withSlot), [`offer/accept/${by}`]: true };
+}
+
 function armyLabel(game: NetGame, army: 'w' | 'b'): string {
-  return seatsOf(game)
-    .filter((slot) => SLOT_COLOR[slot] === army)
+  const seats = seatsOf(game).filter((slot) => SLOT_COLOR[slot] === army);
+  // An empty seat is not a player to name. A team of one reads as one name,
+  // not as "Carol & P4".
+  const present = seats.filter((slot) => isSeatFilled(game, slot));
+  return (present.length > 0 ? present : seats)
     .map((slot) => game.players?.[slot]?.name ?? slot)
     .join(' & ');
+}
+
+/**
+ * Fifteen seconds to the other team — the chess.com gesture. It can only ever
+ * cost you the game, which is why it is offered without a budget or a cooldown.
+ */
+function GiveTime({
+  game,
+  uid,
+  busy,
+  onGive,
+}: {
+  game: NetGame;
+  uid: string;
+  busy: boolean;
+  onGive: (army: 'w' | 'b') => void;
+}) {
+  const army = giftTarget(game, uid);
+  if (!army) return null;
+
+  return (
+    <button className="givetime" disabled={busy} onClick={() => onGive(army)}>
+      +15s to {army === 'w' ? 'White' : 'Black'}
+    </button>
+  );
+}
+
+/**
+ * Seats nobody took. They are playable by the teammate already, so this is not
+ * a hole to be plugged — it is an invitation to whoever wandered in late, and a
+ * way for a seated player to move across the table.
+ */
+function OpenSeats({
+  game,
+  mySlot,
+  busy,
+  onTake,
+}: {
+  game: NetGame;
+  mySlot: Slot | null;
+  busy: boolean;
+  onTake: (slot: Slot) => void;
+}) {
+  const open = emptySeats(game);
+  if (open.length === 0 || game.status !== 'active') return null;
+
+  return (
+    <div className="openseats">
+      <span className="label">Open seats</span>
+      {open.map((slot) => (
+        <button key={slot} disabled={busy} onClick={() => onTake(slot)}>
+          {mySlot ? `Move to ${slot}` : `Take ${slot}`}
+          <span className={`pip pip-${SLOT_COLOR[slot]}`} />
+        </button>
+      ))}
+    </div>
+  );
 }
 
 /**
@@ -283,6 +405,16 @@ function TakeoverNotice({
   const onMove = game.toMove;
   if (onMove === mySlot) return null;
   if (teammateIn(game.rotation, onMove) !== mySlot) return null;
+
+  // Nobody ever took this seat, so there is no countdown to run and nobody to
+  // wait for — it is simply your move, every time the rotation comes round.
+  if (!isSeatFilled(game, onMove)) {
+    return (
+      <p className="reject takeover">
+        {onMove} is empty — you are playing both of your army&rsquo;s turns.
+      </p>
+    );
+  }
 
   const seconds = takeoverIn(game, onMove, now);
   if (seconds === null) return null;
@@ -359,6 +491,55 @@ function useConsentSettler(
       // Another client got there first. The listener will show the result.
     });
   }, [game, gameId, mySlot]);
+}
+
+/**
+ * The seat trade, settled exactly the way an ending is (decision #3): rules
+ * read consent from the pre-write tree, so the second signature cannot also
+ * perform the swap. Every seated client tries; the first one wins, and the rest
+ * fail against an offer that is no longer there.
+ */
+function useSwapSettler(
+  gameId: string,
+  game: NetGame | null,
+  mySlot: Slot | null,
+) {
+  useEffect(() => {
+    if (!game || !mySlot || game.status !== 'lobby') return;
+    const offer = game.offer;
+    if (offer?.kind !== 'swap' || !consentComplete(game, offer)) return;
+
+    const swap = swapSettleUpdate(game, offer);
+    if (!swap) return;
+
+    void update(ref(getDb(), `games/${gameId}`), {
+      ...swap,
+      ...clearOfferUpdate(seatsOf(game)),
+    }).catch(() => {
+      // Another client got there first. The listener will show the new seats.
+    });
+  }, [game, gameId, mySlot]);
+}
+
+/**
+ * Take ownership of a seat arrived in by a swap.
+ *
+ * The seat still carries the other player's secret, and this browser's ticket
+ * still names the seat it left — so until this runs, coming back in a different
+ * browser would reclaim the wrong seat, or fail. Only the seat's current
+ * holder may replace its secret, which, now that the swap has landed, is us.
+ */
+function useSecretAfterSwap(gameId: string, mySlot: Slot | null) {
+  useEffect(() => {
+    if (!mySlot) return;
+    const ticket = recallSeat(gameId);
+    if (ticket?.slot === mySlot) return;
+    void remintSecret(getDb(), gameId, mySlot).catch(() => {
+      // Worth retrying on the next render rather than reporting: the seat is
+      // held either way, and only recovery from a *different* browser is at
+      // stake.
+    });
+  }, [gameId, mySlot]);
 }
 
 /**

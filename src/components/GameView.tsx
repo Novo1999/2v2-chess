@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Color, GameState, MoveIntent, MoveRecord, Slot } from '../game/types';
 import { SLOT_COLOR } from '../game/types';
 import { START_FEN, colorToMove, isCheck, kingSquare, slotToMove } from '../game/rules';
 import { capturedTray, toPgn } from '../game/derive';
+import { loadOpenings, nameOpening, type Opening, type OpeningTable } from '../game/openings';
 import { Board, Hourglass, type Ending } from './Board';
 import { CapturedTray } from './CapturedTray';
 import { HistoryNav, MoveList } from './MoveList';
@@ -126,6 +127,7 @@ export function GameView({
         <PlayerList state={state} you={you} names={names} presence={presence} />
         {aside}
         <div className="history">
+          <OpeningName moves={moves} />
           <MoveList moves={state.moves} shown={shown} onShow={show} />
           <HistoryNav total={state.moves.length} shown={shown} onShow={show} />
         </div>
@@ -137,6 +139,48 @@ export function GameView({
         <pre className="pgn">{toPgn(state.moves, state.result)}</pre>
       </aside>
     </div>
+  );
+}
+
+/**
+ * The opening, named from the position on the board rather than from the whole
+ * game — so stepping back through the history watches the name narrow from
+ * "King's Pawn Game" down to the variation actually played.
+ *
+ * The table is fetched rather than bundled (see game/openings.ts), so this is
+ * empty on the first render and fills a moment later. There is nothing to show
+ * before the first move anyway.
+ */
+function useOpening(moves: readonly MoveRecord[]): Opening | null {
+  const [table, setTable] = useState<OpeningTable | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    void loadOpenings().then(
+      (loaded) => {
+        if (live) setTable(loaded);
+      },
+      () => {
+        /* offline, or the chunk failed. The game does not depend on it. */
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  return useMemo(() => (table ? nameOpening(table, moves) : null), [table, moves]);
+}
+
+function OpeningName({ moves }: { moves: readonly MoveRecord[] }) {
+  const opening = useOpening(moves);
+  if (!opening) return null;
+
+  return (
+    <p className="opening" title={`Still book after ${opening.depth} half-moves`}>
+      <span className="eco">{opening.eco}</span>
+      {opening.name}
+    </p>
   );
 }
 

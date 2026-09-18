@@ -11,9 +11,10 @@ import { serverTimestamp } from 'firebase/database';
 import type { GameStatus, MoveIntent, Result, Slot } from '../game/types';
 import { SLOT_COLOR } from '../game/types';
 import { applyMove, START_FEN } from '../game/rules';
-import type { NetGame, Offer, OfferKind, SeatCount } from './schema';
+import type { NetGame, Offer, OfferKind, PlayerPresence, SeatCount } from './schema';
 import {
   armySeats,
+  isSeatFilled,
   rotationFor,
   seatsOf,
   teammateIn,
@@ -25,6 +26,12 @@ export const DEFAULT_CLOCK_MS = 10 * 60 * 1000;
 
 /** Mirrors GRACE_MS in rules/build.mjs — kept in step by a rules test. */
 export const GRACE_MS = 25000;
+
+/** Mirrors RESERVE_MS in rules/build.mjs — kept in step by a rules test. */
+export const RESERVE_MS = 2000;
+
+/** Mirrors GIFT_MS in rules/build.mjs — kept in step by a rules test. */
+export const GIFT_MS = 15000;
 
 export type Update = Record<string, unknown>;
 
@@ -161,17 +168,31 @@ export function clearOfferUpdate(seats: readonly Slot[]): Update {
     'offer/kind': null,
     'offer/army': null,
     'offer/by': null,
+    'offer/with': null,
     'offer/at': null,
   };
   for (const slot of seats) update[`offer/accept/${slot}`] = null;
   return update;
 }
 
-/** Who still has to say yes before `offer` can end the game. */
+/**
+ * Who still has to say yes.
+ *
+ * An empty seat is skipped rather than counted as a holdout — otherwise a team
+ * playing a man down could never agree to anything, because one of the
+ * signatures it needed would belong to a chair. This mirrors `agreedOrEmpty`
+ * in the rules exactly.
+ */
 export function consentOutstanding(game: NetGame, offer: Offer): Slot[] {
   const required =
-    offer.kind === 'resign' ? armySeats(game, offer.army) : seatsOf(game);
-  return required.filter((slot) => offer.accept?.[slot] !== true);
+    offer.kind === 'swap'
+      ? ([offer.by, offer.with].filter(Boolean) as Slot[])
+      : offer.kind === 'resign'
+        ? armySeats(game, offer.army)
+        : seatsOf(game);
+  return required.filter(
+    (slot) => isSeatFilled(game, slot) && offer.accept?.[slot] !== true,
+  );
 }
 
 export function consentComplete(game: NetGame, offer: Offer): boolean {
@@ -189,6 +210,101 @@ export function settleOfferUpdate(offer: Offer): Update {
   };
 }
 
+// --- trading seats ---------------------------------------------------------
+
+/** Proposing a trade. Same node, same signatures, different question. */
+export function swapOfferFields(by: Slot, withSlot: Slot): Update {
+  return {
+    'offer/kind': 'swap' satisfies OfferKind,
+    'offer/army': SLOT_COLOR[by],
+    'offer/by': by,
+    'offer/with': withSlot,
+    'offer/at': serverTimestamp(),
+  };
+}
+
+/**
+ * The settling write for an agreed swap: both seats in one update, so there is
+ * never a moment where one player has stood up and the other has not sat down.
+ *
+ * Each player's own client re-mints the secret for the seat they land in — the
+ * seat they moved into still carries the other player's secret, and only the
+ * seat's current holder is allowed to replace it.
+ */
+export function swapSettleUpdate(game: NetGame, offer: Offer): Update | null {
+  const there = offer.with;
+  if (offer.kind !== 'swap' || !there) return null;
+
+  const here = game.players?.[offer.by];
+  const other = game.players?.[there];
+  if (!here?.uid || !other?.uid) return null;
+
+  return {
+    [`players/${offer.by}`]: seatNodeFrom(other),
+    [`players/${there}`]: seatNodeFrom(here),
+  };
+}
+
+/** Carry a player's identity and presence into the seat they are moving to. */
+function seatNodeFrom(player: PlayerPresence): Update {
+  const node: Update = {
+    uid: player.uid,
+    connected: player.connected !== false,
+    lastSeen: serverTimestamp(),
+  };
+  if (player.name) node['name'] = player.name;
+  return node;
+}
+
+/** Seats this player could propose trading with: taken, and not their own. */
+export function swappableSeats(game: NetGame, mySlot: Slot | null): Slot[] {
+  if (!mySlot) return [];
+  return seatsOf(game).filter(
+    (slot) => slot !== mySlot && isSeatFilled(game, slot),
+  );
+}
+
+// --- holding an empty seat while you take it -------------------------------
+
+/** The hold itself. `at` is the server's clock, because rules check it. */
+export function holdUpdate(uid: string): Update {
+  return { uid, at: serverTimestamp() };
+}
+
+/**
+ * Somebody else is mid-claim on this seat right now, so the button is greyed
+ * out. Expiry is on read, not on a timer — a client that vanished mid-claim
+ * releases the seat simply by the clock passing.
+ */
+export function heldByOther(
+  game: NetGame,
+  slot: Slot,
+  uid: string,
+  now: number,
+): boolean {
+  const hold = game.reserve?.[slot];
+  if (!hold || hold.uid === uid) return false;
+  return now - hold.at < RESERVE_MS;
+}
+
+// --- handing the other team time -------------------------------------------
+
+/**
+ * The chess.com gesture: fifteen seconds to the opponents, never to yourself.
+ * That it can only ever cost you the game is why it needs no limit — see the
+ * note on `giftTo` in rules/build.mjs.
+ */
+export function giftUpdate(game: NetGame, to: 'w' | 'b'): Update {
+  return { [`clocks/${to}`]: game.clocks[to] + GIFT_MS };
+}
+
+/** The army a seated player is allowed to hand time to. */
+export function giftTarget(game: NetGame, uid: string): 'w' | 'b' | null {
+  if (game.status !== 'active') return null;
+  const slot = seatOfUid(game, uid);
+  return slot ? (SLOT_COLOR[slot] === 'w' ? 'b' : 'w') : null;
+}
+
 // --- who may act -----------------------------------------------------------
 
 /**
@@ -203,7 +319,10 @@ export function mayMoveNow(game: NetGame, uid: string, now: number): boolean {
 
   const mate = teammateIn(game.rotation, onMove);
   if (!mate || game.players?.[mate]?.uid !== uid) return false;
-  return isAbsent(game, onMove, now);
+  // An empty seat carries no grace period. The wait exists to let a player who
+  // dropped come back to their own turn; nobody is coming back to a seat that
+  // was never taken, and waiting would burn 25s of shared clock every turn.
+  return !isSeatFilled(game, onMove) || isAbsent(game, onMove, now);
 }
 
 export function isAbsent(game: NetGame, slot: Slot, now: number): boolean {

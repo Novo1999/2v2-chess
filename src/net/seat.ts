@@ -17,7 +17,7 @@
 import { onDisconnect, onValue, ref, serverTimestamp, set, update } from 'firebase/database';
 import type { Database } from 'firebase/database';
 import type { Slot } from '../game/types';
-import { claimSeatNode } from './writes';
+import { claimSeatNode, holdUpdate } from './writes';
 
 const STORE_PREFIX = 'consultation-chess:seat:';
 
@@ -60,7 +60,13 @@ export function forgetSeat(gameId: string): void {
   }
 }
 
-/** Take an unoccupied seat, then mint the secret that makes it recoverable. */
+/**
+ * Take an unoccupied seat, then mint the secret that makes it recoverable.
+ *
+ * The hold goes first so that everyone else's copy of the lobby greys this seat
+ * out for the moment it takes to sit down. It is released in the same update
+ * that claims the seat, so the window is as short as the round trip.
+ */
 export async function claimSeat(
   db: Database,
   gameId: string,
@@ -68,7 +74,88 @@ export async function claimSeat(
   uid: string,
   name?: string,
 ): Promise<SeatTicket> {
-  await set(ref(db, `games/${gameId}/players/${slot}`), claimSeatNode(uid, name));
+  await hold(db, gameId, slot, uid);
+  await update(ref(db), {
+    [`games/${gameId}/players/${slot}`]: claimSeatNode(uid, name),
+    [`games/${gameId}/reserve/${slot}`]: null,
+  });
+  return mint(db, gameId, slot);
+}
+
+/**
+ * Stand up. The secret goes with the seat, in the same update.
+ *
+ * Leaving it behind would not merely be untidy — `claimable` refuses a seat
+ * that still has a secret on it, so a seat vacated without clearing it would be
+ * unclaimable by everyone, including the player who just left.
+ */
+export async function vacateSeat(
+  db: Database,
+  gameId: string,
+  slot: Slot,
+): Promise<void> {
+  await update(ref(db), {
+    [`games/${gameId}/players/${slot}`]: null,
+    [`secrets/${gameId}/${slot}`]: null,
+  });
+  forgetSeat(gameId);
+}
+
+/**
+ * Move to an empty seat: stand up and sit down in one atomic update, so the
+ * seat being left cannot be taken out from under a half-finished move, and the
+ * seat being taken is already held.
+ */
+export async function moveToSeat(
+  db: Database,
+  gameId: string,
+  from: Slot,
+  to: Slot,
+  uid: string,
+  name?: string,
+): Promise<SeatTicket> {
+  await hold(db, gameId, to, uid);
+  await update(ref(db), {
+    [`games/${gameId}/players/${from}`]: null,
+    [`secrets/${gameId}/${from}`]: null,
+    [`games/${gameId}/players/${to}`]: claimSeatNode(uid, name),
+    [`games/${gameId}/reserve/${to}`]: null,
+  });
+  return mint(db, gameId, to);
+}
+
+/**
+ * Take ownership of a seat arrived in by a swap. The seat still carries the
+ * other player's secret, and only its current holder may replace it — which,
+ * after the swap landed, is now us.
+ */
+export async function remintSecret(
+  db: Database,
+  gameId: string,
+  slot: Slot,
+): Promise<SeatTicket> {
+  return mint(db, gameId, slot);
+}
+
+/** Claim the two-second hold, translating the refusal into something readable. */
+async function hold(
+  db: Database,
+  gameId: string,
+  slot: Slot,
+  uid: string,
+): Promise<void> {
+  try {
+    await set(ref(db, `games/${gameId}/reserve/${slot}`), holdUpdate(uid));
+  } catch {
+    throw new Error(`${slot} is being taken by somebody else right now`);
+  }
+}
+
+async function mint(
+  db: Database,
+  gameId: string,
+  slot: Slot,
+): Promise<SeatTicket> {
   const secret = mintSecret();
   await set(ref(db, `secrets/${gameId}/${slot}`), secret);
   const ticket = { slot, secret };

@@ -21,7 +21,8 @@
     "deploy": "npm run build && firebase deploy --only database,hosting",
     "deploy:rules": "node rules/build.mjs && firebase deploy --only database",
     "pieces:wood": "node scripts/build-wood-pieces.mjs",
-    "board:grain": "node scripts/build-board-grain.mjs"
+    "board:grain": "node scripts/build-board-grain.mjs",
+    "openings": "node scripts/build-openings.mjs"
   },
   "dependencies": {
     "chess.js": "^1.0.0",

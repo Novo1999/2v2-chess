@@ -52,14 +52,33 @@ export interface NetMove {
   ts: number;
 }
 
-export type OfferKind = 'resign' | 'draw';
+/**
+ * `swap` reuses the consent machinery rather than adding a second one: it is
+ * the same shape of question — a thing that cannot happen until named seats
+ * have all said yes — so it is the same node, the same signatures, and the same
+ * settling write (decision #3).
+ */
+export type OfferKind = 'resign' | 'draw' | 'swap';
 
 export interface Offer {
   kind: OfferKind;
   army: 'w' | 'b';
   by: Slot;
+  /** The counterpart seat of a `swap`. Absent on resign and draw. */
+  with?: Slot;
   at: number;
   accept?: Partial<Record<Slot, boolean>>;
+}
+
+/**
+ * A two-second hold on an empty seat, so two people reaching for the same one
+ * see it greyed out rather than both clicking and one losing. Advisory in
+ * spirit but enforced in rules, and self-expiring so a client that dies
+ * mid-claim cannot wedge a seat shut.
+ */
+export interface SeatHold {
+  uid: string;
+  at: number;
 }
 
 export interface NetGame {
@@ -77,6 +96,7 @@ export interface NetGame {
   players?: Partial<Record<Slot, PlayerPresence>>;
   moves?: Record<string, NetMove>;
   offer?: Offer | null;
+  reserve?: Partial<Record<Slot, SeatHold>>;
 }
 
 /** Walk the rotation cycle to recover the seat order as an array. */
@@ -145,4 +165,32 @@ export function isSeatFilled(game: NetGame, slot: Slot): boolean {
 
 export function allSeatsFilled(game: NetGame): boolean {
   return seatsOf(game).every((slot) => isSeatFilled(game, slot));
+}
+
+/**
+ * Seats this game uses that nobody is sitting in. They are not holes in the
+ * game: the rotation still lands on them and the remaining teammate plays
+ * them, and anyone arriving later can drop straight in.
+ */
+export function emptySeats(game: NetGame): Slot[] {
+  return seatsOf(game).filter((slot) => !isSeatFilled(game, slot));
+}
+
+/** An army with at least one player can play, short-handed or not. */
+export function armyManned(game: NetGame, army: 'w' | 'b'): boolean {
+  return armySeats(game, army).some((slot) => isSeatFilled(game, slot));
+}
+
+/**
+ * Both armies have somebody in them. A team may be a man down — that is the
+ * point — but it may not be nobody at all.
+ */
+export function canStart(game: NetGame): boolean {
+  return armyManned(game, 'w') && armyManned(game, 'b');
+}
+
+/** True when this seat is carrying its army alone. */
+export function isSolo(game: NetGame, slot: Slot): boolean {
+  const mate = teammateIn(game.rotation, slot);
+  return mate === null || !isSeatFilled(game, mate);
 }

@@ -19,11 +19,26 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Slot } from '../src/game/types';
 import type { NetGame } from '../src/net/schema';
 import { ROTATION_2, ROTATION_4 } from '../src/net/schema';
-import { moveUpdate, offerFields, startUpdate, timeoutUpdate } from '../src/net/writes';
+import {
+  GIFT_MS as CLIENT_GIFT_MS,
+  RESERVE_MS as CLIENT_RESERVE_MS,
+  giftUpdate,
+  moveUpdate,
+  offerFields,
+  startUpdate,
+  swapSettleUpdate,
+  timeoutUpdate,
+} from '../src/net/writes';
 
 const GID = 'ROOM42';
-const GRACE_MS = 25000;
 const SECRET = 'a-secret-of-sufficient-length-01';
+
+// Restated here rather than imported from rules/build.mjs, so that a change to
+// either side of the client/rules pair fails a test instead of quietly
+// agreeing with itself. The last test in each suite below asserts the match.
+const GRACE_MS = 25000;
+const RESERVE_MS = 2000;
+const GIFT_MS = 15000;
 
 const UID: Record<Slot, string> = {
   P1: 'uid-p1',
@@ -63,11 +78,15 @@ interface SeedOptions {
   seats?: 2 | 4;
   status?: NetGame['status'];
   clocks?: { w: number; b: number };
+  /** The seat on move. Defaults to P1, the start of the rotation. */
+  toMove?: Slot;
   /** Seats to fill. Defaults to every seat the rotation uses. */
   fill?: Slot[];
   lastMoveAt?: number;
   offer?: NetGame['offer'];
   secrets?: Partial<Record<Slot, string>>;
+  /** Live seat holds, as `reserve/$slot`. `at` is relative to now, in ms. */
+  reserve?: Partial<Record<Slot, { uid: string; at: number }>>;
 }
 
 /** Plant a game directly, bypassing rules — the fixture, not the thing tested. */
@@ -78,10 +97,22 @@ async function seed(options: SeedOptions = {}): Promise<NetGame> {
   const fill = options.fill ?? order;
   const now = Date.now();
 
+  // A seat on move must be seated behind a position whose side to move matches
+  // its army, or the rules layer rejects the move before the security rules
+  // are ever consulted. Black seats get the position after 1.e4.
+  const onMove = options.toMove ?? 'P1';
+  const fen =
+    onMove === 'P3' || onMove === 'P4'
+      ? 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1'
+      : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+
   const game: NetGame = {
-    fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
-    turnIndex: 0,
-    toMove: 'P1',
+    fen,
+    // The client rules layer derives whose turn it is from `turnIndex`, so a
+    // seeded `toMove` has to agree with it or `moveUpdate` refuses the move
+    // before any of this reaches the database.
+    turnIndex: order.indexOf(onMove),
+    toMove: onMove,
     rotation,
     seats,
     clocks: options.clocks ?? { w: 600000, b: 600000 },
@@ -97,7 +128,17 @@ async function seed(options: SeedOptions = {}): Promise<NetGame> {
       ]),
     ),
     ...(options.offer ? { offer: options.offer } : {}),
-  };
+    ...(options.reserve
+      ? {
+          reserve: Object.fromEntries(
+            Object.entries(options.reserve).map(([slot, hold]) => [
+              slot,
+              { uid: hold.uid, at: now + hold.at },
+            ]),
+          ),
+        }
+      : {}),
+  } as NetGame;
 
   await env.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.database() as unknown as Database;
@@ -399,9 +440,24 @@ describe('seats and secrets', () => {
     await assertFails(set(ref(asStranger(), `secrets/${GID}/P1`), SECRET));
   });
 
-  it('refuses overwriting a secret that already exists', async () => {
+  // A secret used to be write-once. It is now replaceable BY ITS HOLDER, which
+  // is what lets a player swapped into a seat take ownership of it — the seat
+  // they moved into already had somebody else's secret on it. The protection
+  // that matters is unchanged and asserted just above and just below: only the
+  // current holder can write it at all, and holding a seat means you either
+  // found it empty or proved this very secret.
+  it('lets the seat holder replace their own secret', async () => {
     await seed({ status: 'lobby', fill: ['P1'], secrets: { P1: SECRET } });
-    await assertFails(set(ref(as('P1'), `secrets/${GID}/P1`), 'a-different-secret-value-here'));
+    await assertSucceeds(
+      set(ref(as('P1'), `secrets/${GID}/P1`), 'a-different-secret-value-here'),
+    );
+  });
+
+  it('refuses replacing the secret of a seat somebody else holds', async () => {
+    await seed({ status: 'lobby', fill: ['P1'], secrets: { P1: SECRET } });
+    await assertFails(
+      set(ref(as('P3'), `secrets/${GID}/P1`), 'a-different-secret-value-here'),
+    );
   });
 
   it('lets the original player reclaim their seat from a new uid with the secret', async () => {
@@ -459,8 +515,15 @@ describe('seats and secrets', () => {
 });
 
 describe('starting the game', () => {
-  it('refuses to leave the lobby with a seat still empty', async () => {
+  // Three players is a real table, not a broken one: black plays a man down and
+  // P4 stays open for anyone who turns up later.
+  it('starts a four-seat game with one seat still empty', async () => {
     await seed({ status: 'lobby', fill: ['P1', 'P3', 'P2'] });
+    await assertSucceeds(update(ref(as('P1'), `games/${GID}`), startUpdate()));
+  });
+
+  it('refuses to start with an army that has nobody in it', async () => {
+    await seed({ status: 'lobby', fill: ['P1', 'P2'] });
     await assertFails(update(ref(as('P1'), `games/${GID}`), startUpdate()));
   });
 
@@ -652,5 +715,322 @@ describe('the game node itself', () => {
 
   it('refuses writes anywhere outside the three known roots', async () => {
     await assertFails(set(ref(as('P1'), 'somewhere/else'), true));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Playing a man down, trading seats, holding a seat, handing over time.
+// ---------------------------------------------------------------------------
+
+describe('playing a man down', () => {
+  it('lets the lone teammate play an empty seat at once, with no grace period', async () => {
+    // P1, P2 and P3 are seated; P4 never turned up. When the rotation reaches
+    // P4 the seat is nobody's, so P3 — the rest of black — plays it.
+    const game = await seed({ fill: ['P1', 'P2', 'P3'], toMove: 'P4' });
+    await assertSucceeds(
+      update(ref(as('P3'), `games/${GID}`), move(game, 'e7', 'e5', as('P3'))),
+    );
+  });
+
+  it('still refuses an opponent playing the empty seat', async () => {
+    const game = await seed({ fill: ['P1', 'P2', 'P3'], toMove: 'P4' });
+    await assertFails(
+      update(ref(as('P1'), `games/${GID}`), move(game, 'e7', 'e5', as('P1'))),
+    );
+  });
+
+  it('still refuses a stranger playing the empty seat', async () => {
+    const game = await seed({ fill: ['P1', 'P2', 'P3'], toMove: 'P4' });
+    await assertFails(
+      update(ref(asStranger(), `games/${GID}`), move(game, 'e7', 'e5', asStranger())),
+    );
+  });
+
+  it('lets a short-handed army resign without the empty seat’s signature', async () => {
+    await seed({
+      fill: ['P1', 'P2', 'P3'],
+      offer: { kind: 'resign', army: 'b', by: 'P3', at: Date.now(), accept: { P3: true } },
+    });
+    await assertSucceeds(
+      update(ref(as('P3'), `games/${GID}`), { status: 'resigned', result: '1-0' }),
+    );
+  });
+
+  it('refuses a resignation signed by nobody at all', async () => {
+    // Both black seats empty. There is no army left to agree to anything, and
+    // `armyManned` is what stops the empty-seat shortcut collapsing into that.
+    await seed({
+      fill: ['P1', 'P2'],
+      offer: { kind: 'resign', army: 'b', by: 'P3', at: Date.now(), accept: {} },
+    });
+    await assertFails(
+      update(ref(as('P1'), `games/${GID}`), { status: 'resigned', result: '1-0' }),
+    );
+  });
+});
+
+describe('leaving a seat', () => {
+  it('lets a player vacate their own seat, secret and all', async () => {
+    await seed({ status: 'lobby', fill: ['P1', 'P3'], secrets: { P1: SECRET } });
+    await assertSucceeds(
+      update(ref(as('P1')), {
+        [`games/${GID}/players/P1`]: null,
+        [`secrets/${GID}/P1`]: null,
+      }),
+    );
+  });
+
+  it('refuses vacating somebody else’s seat', async () => {
+    await seed({ status: 'lobby', fill: ['P1', 'P3'] });
+    await assertFails(set(ref(as('P3'), `games/${GID}/players/P1`), null));
+  });
+
+  it('refuses a stranger vacating a seat', async () => {
+    await seed({ status: 'lobby', fill: ['P1', 'P3'] });
+    await assertFails(set(ref(asStranger(), `games/${GID}/players/P1`), null));
+  });
+
+  it('leaves a vacated seat claimable by the next player', async () => {
+    await seed({ status: 'lobby', fill: ['P3'] });
+    await assertSucceeds(
+      set(ref(asStranger(), `games/${GID}/players/P1`), {
+        uid: 'uid-nobody',
+        connected: true,
+        lastSeen: Date.now(),
+      }),
+    );
+  });
+
+  // Why vacating clears the secret in the same update. This asserts the trap
+  // rather than the feature: a seat left with its secret on it is a seat
+  // nobody — including the player who just left it — can ever sit in again.
+  it('shows why the secret must leave with the player', async () => {
+    await seed({ status: 'lobby', fill: [], secrets: { P1: SECRET } });
+    await assertFails(
+      set(ref(asStranger(), `games/${GID}/players/P1`), {
+        uid: 'uid-nobody',
+        connected: true,
+        lastSeen: Date.now(),
+      }),
+    );
+  });
+});
+
+describe('holding a seat while you take it', () => {
+  const hold = (uid: string) => ({ uid, at: { '.sv': 'timestamp' } });
+  const sit = (uid: string) => ({ uid, connected: true, lastSeen: Date.now() });
+
+  it('lets a player hold an empty seat', async () => {
+    await seed({ status: 'lobby', fill: [] });
+    await assertSucceeds(set(ref(as('P1'), `games/${GID}/reserve/P1`), hold(UID.P1)));
+  });
+
+  it('blocks another player from claiming a seat under a live hold', async () => {
+    await seed({ status: 'lobby', fill: [], reserve: { P1: { uid: UID.P1, at: 0 } } });
+    await assertFails(set(ref(as('P3'), `games/${GID}/players/P1`), sit(UID.P3)));
+  });
+
+  it('lets the holder claim through their own hold', async () => {
+    await seed({ status: 'lobby', fill: [], reserve: { P1: { uid: UID.P1, at: 0 } } });
+    await assertSucceeds(set(ref(as('P1'), `games/${GID}/players/P1`), sit(UID.P1)));
+  });
+
+  it('blocks nobody once the hold has expired', async () => {
+    await seed({
+      status: 'lobby',
+      fill: [],
+      reserve: { P1: { uid: UID.P1, at: -RESERVE_MS - 1000 } },
+    });
+    await assertSucceeds(set(ref(as('P3'), `games/${GID}/players/P1`), sit(UID.P3)));
+  });
+
+  it('refuses taking over a hold somebody else is still using', async () => {
+    await seed({ status: 'lobby', fill: [], reserve: { P1: { uid: UID.P1, at: 0 } } });
+    await assertFails(set(ref(as('P3'), `games/${GID}/reserve/P1`), hold(UID.P3)));
+  });
+
+  it('refuses holding a seat somebody is sitting in', async () => {
+    await seed({ status: 'lobby', fill: ['P1'] });
+    await assertFails(set(ref(as('P3'), `games/${GID}/reserve/P1`), hold(UID.P3)));
+  });
+
+  it('refuses a hold under another player’s uid', async () => {
+    await seed({ status: 'lobby', fill: [] });
+    await assertFails(set(ref(as('P1'), `games/${GID}/reserve/P1`), hold(UID.P3)));
+  });
+
+  it('refuses a post-dated hold, which would outlast its window', async () => {
+    await seed({ status: 'lobby', fill: [] });
+    await assertFails(
+      set(ref(as('P1'), `games/${GID}/reserve/P1`), { uid: UID.P1, at: Date.now() + 60000 }),
+    );
+  });
+
+  it('refuses releasing somebody else’s hold', async () => {
+    await seed({ status: 'lobby', fill: [], reserve: { P1: { uid: UID.P1, at: 0 } } });
+    await assertFails(set(ref(as('P3'), `games/${GID}/reserve/P1`), null));
+  });
+
+  it('keeps the hold window in step with the client', () => {
+    expect(RESERVE_MS).toBe(CLIENT_RESERVE_MS);
+  });
+});
+
+describe('trading seats', () => {
+  const agreed = {
+    kind: 'swap' as const,
+    army: 'w' as const,
+    by: 'P1' as const,
+    with: 'P3' as const,
+  };
+  const signed = { P1: true, P3: true };
+
+  it('swaps two seats once both have signed', async () => {
+    const game = await seed({
+      status: 'lobby',
+      offer: { ...agreed, at: Date.now(), accept: signed },
+    });
+    await assertSucceeds(
+      update(ref(as('P1'), `games/${GID}`), swapSettleUpdate(game, game.offer!)!),
+    );
+  });
+
+  it('lets the other party settle it just as well', async () => {
+    const game = await seed({
+      status: 'lobby',
+      offer: { ...agreed, at: Date.now(), accept: signed },
+    });
+    await assertSucceeds(
+      update(ref(as('P3'), `games/${GID}`), swapSettleUpdate(game, game.offer!)!),
+    );
+  });
+
+  it('refuses a swap with only one signature', async () => {
+    const game = await seed({
+      status: 'lobby',
+      offer: { ...agreed, at: Date.now(), accept: { P1: true } },
+    });
+    await assertFails(
+      update(ref(as('P1'), `games/${GID}`), swapSettleUpdate(game, game.offer!)!),
+    );
+  });
+
+  it('refuses a swap with no offer open at all', async () => {
+    await seed({ status: 'lobby' });
+    await assertFails(
+      update(ref(as('P1'), `games/${GID}`), {
+        'players/P1': { uid: UID.P3, connected: true, lastSeen: Date.now() },
+        'players/P3': { uid: UID.P1, connected: true, lastSeen: Date.now() },
+      }),
+    );
+  });
+
+  // The grant is "put the counterpart's uid here", not "put anybody here".
+  it('refuses smuggling an unrelated uid in under an agreed swap', async () => {
+    await seed({
+      status: 'lobby',
+      offer: { ...agreed, at: Date.now(), accept: signed },
+    });
+    await assertFails(
+      update(ref(as('P1'), `games/${GID}`), {
+        'players/P1': { uid: 'uid-nobody', connected: true, lastSeen: Date.now() },
+        'players/P3': { uid: UID.P1, connected: true, lastSeen: Date.now() },
+      }),
+    );
+  });
+
+  it('refuses dragging in a seat the offer does not name', async () => {
+    await seed({
+      status: 'lobby',
+      offer: { ...agreed, at: Date.now(), accept: signed },
+    });
+    await assertFails(
+      set(ref(as('P1'), `games/${GID}/players/P2`), {
+        uid: UID.P4,
+        connected: true,
+        lastSeen: Date.now(),
+      }),
+    );
+  });
+
+  it('refuses a swap once the clocks are running', async () => {
+    const game = await seed({
+      status: 'active',
+      offer: { ...agreed, at: Date.now(), accept: signed },
+    });
+    await assertFails(
+      update(ref(as('P1'), `games/${GID}`), swapSettleUpdate(game, game.offer!)!),
+    );
+  });
+
+  it('refuses a swap settled by somebody with no seat', async () => {
+    const game = await seed({
+      status: 'lobby',
+      offer: { ...agreed, at: Date.now(), accept: signed },
+    });
+    await assertFails(
+      update(ref(asStranger(), `games/${GID}`), swapSettleUpdate(game, game.offer!)!),
+    );
+  });
+
+  it('refuses signing the swap on the other seat’s behalf', async () => {
+    await seed({
+      status: 'lobby',
+      offer: { ...agreed, at: Date.now(), accept: { P1: true } },
+    });
+    await assertFails(set(ref(as('P1'), `games/${GID}/offer/accept/P3`), true));
+  });
+});
+
+describe('handing the other team fifteen seconds', () => {
+  const evenClocks = { w: 600000, b: 600000 };
+
+  it('lets a black seat add exactly fifteen seconds to the white clock', async () => {
+    const game = await seed({ clocks: evenClocks });
+    await assertSucceeds(update(ref(as('P3'), `games/${GID}`), giftUpdate(game, 'w')));
+  });
+
+  it('lets a white seat do the same for black', async () => {
+    const game = await seed({ clocks: evenClocks });
+    await assertSucceeds(update(ref(as('P1'), `games/${GID}`), giftUpdate(game, 'b')));
+  });
+
+  it('refuses a gift to your own army', async () => {
+    const game = await seed({ clocks: evenClocks });
+    await assertFails(update(ref(as('P1'), `games/${GID}`), giftUpdate(game, 'w')));
+  });
+
+  it('refuses an amount that is not fifteen seconds', async () => {
+    await seed({ clocks: evenClocks });
+    await assertFails(
+      update(ref(as('P3'), `games/${GID}`), { 'clocks/w': 600000 + 60000 }),
+    );
+  });
+
+  it('refuses a gift from somebody with no seat', async () => {
+    const game = await seed({ clocks: evenClocks });
+    await assertFails(update(ref(asStranger(), `games/${GID}`), giftUpdate(game, 'w')));
+  });
+
+  it('refuses a gift once the game is over', async () => {
+    const game = await seed({ status: 'checkmate', clocks: evenClocks });
+    await assertFails(update(ref(as('P3'), `games/${GID}`), giftUpdate(game, 'w')));
+  });
+
+  /**
+   * The precedence trap, asserted directly. If the gift branch of the clock
+   * validate were not pinned to "not a turn advance", a mover could bolt +15s
+   * onto their OWN clock while playing a legal move, and the decrement window
+   * — the whole reason clocks are validated — would be bypassed every turn.
+   */
+  it('refuses a mover bolting fifteen seconds onto their own clock', async () => {
+    const game = await seed({ clocks: evenClocks });
+    const cheat = move(game, 'e2', 'e4', as('P1'));
+    cheat['clocks/w'] = game.clocks.w + GIFT_MS;
+    await assertFails(update(ref(as('P1'), `games/${GID}`), cheat));
+  });
+
+  it('keeps the gift in step with the client', () => {
+    expect(GIFT_MS).toBe(CLIENT_GIFT_MS);
   });
 });
