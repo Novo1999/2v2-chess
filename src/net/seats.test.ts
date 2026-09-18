@@ -43,6 +43,7 @@ const NOW = 1_700_000_000_000;
 function game(overrides: Partial<NetGame> = {}, fill: Slot[] = ['P1', 'P2', 'P3', 'P4']): NetGame {
   return {
     fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+    host: UID.P1,
     turnIndex: 0,
     toMove: 'P1',
     rotation: ROTATION_4,

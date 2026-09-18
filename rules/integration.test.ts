@@ -91,7 +91,7 @@ async function playAs(uid: string, from: string, to: string) {
 }
 
 async function openTable() {
-  await assertSucceeds(set(ref(db(UID.P1), `games/${GID}`), newGameNode(4)));
+  await assertSucceeds(set(ref(db(UID.P1), `games/${GID}`), newGameNode(4, UID.P1)));
   for (const slot of SEATS) await sit(slot, `secret-for-${slot}-padded-out`);
   await assertSucceeds(update(ref(db(UID.P1), `games/${GID}`), startUpdate()));
 }
@@ -324,7 +324,7 @@ describe('ending by consent', () => {
 
 describe('a two-seat game', () => {
   it('is the same game with a shorter rotation', async () => {
-    await assertSucceeds(set(ref(db(UID.P1), `games/${GID}`), newGameNode(2)));
+    await assertSucceeds(set(ref(db(UID.P1), `games/${GID}`), newGameNode(2, UID.P1)));
     await sit('P1', 'secret-for-P1-padded-out');
     await sit('P3', 'secret-for-P3-padded-out');
     await assertSucceeds(update(ref(db(UID.P1), `games/${GID}`), startUpdate()));

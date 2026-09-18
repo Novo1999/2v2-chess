@@ -6,7 +6,7 @@
       "$gid": {
         ".read": "auth != null",
         ".write": "auth != null && !data.exists() && newData.exists()",
-        ".validate": "newData.hasChildren(['fen','turnIndex','toMove','rotation','status','seats','clocks'])",
+        ".validate": "newData.hasChildren(['fen','turnIndex','toMove','rotation','status','seats','clocks','host'])",
         "turnIndex": {
           ".write": "auth != null && root.child('games').child($gid).child('status').val() === 'active' && (root.child('games').child($gid).child('players').child(root.child('games').child($gid).child('toMove').val()).child('uid').val() === auth.uid || ((!root.child('games').child($gid).child('players').child(root.child('games').child($gid).child('toMove').val()).child('uid').exists() || (root.child('games').child($gid).child('players').child(root.child('games').child($gid).child('toMove').val()).child('connected').val() === false && now - root.child('games').child($gid).child('players').child(root.child('games').child($gid).child('toMove').val()).child('lastSeen').val() > 25000)) && root.child('games').child($gid).child('players').child(root.child('games').child($gid).child('rotation').child(root.child('games').child($gid).child('rotation').child(root.child('games').child($gid).child('toMove').val()).val()).val()).child('uid').val() === auth.uid)) && newData.val() === data.val() + 1",
           ".validate": "newData.isNumber() && newData.val() >= 0"
@@ -154,6 +154,9 @@
         "seats": {
           ".validate": "newData.val() === 2 || newData.val() === 4"
         },
+        "host": {
+          ".validate": "newData.val() === auth.uid"
+        },
         "initialClock": {
           ".validate": "newData.isNumber() && newData.val() > 0"
         },
@@ -179,6 +182,43 @@
           "$slot": {
             ".write": "auth != null && auth.uid === $uid",
             ".validate": "newData.isString() && newData.val().length >= 20"
+          }
+        }
+      }
+    },
+    "presence": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid",
+        ".validate": "newData.hasChildren(['name','at'])",
+        "name": {
+          ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 24"
+        },
+        "at": {
+          ".validate": "newData.val() === now"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "invites": {
+      "$to": {
+        ".read": "auth != null && auth.uid === $to",
+        "$from": {
+          ".write": "auth != null && ((!newData.exists() && (auth.uid === $to || auth.uid === $from)) || (auth.uid === $from && root.child('games').child(newData.child('game').val()).child('host').val() === auth.uid && root.child('games').child(newData.child('game').val()).child('status').val() === 'lobby'))",
+          ".validate": "newData.hasChildren(['name','game','at']) && root.child('games').child(newData.child('game').val()).exists()",
+          "name": {
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 24"
+          },
+          "game": {
+            ".validate": "newData.isString() && newData.val().length >= 4 && newData.val().length <= 8"
+          },
+          "at": {
+            ".validate": "newData.val() === now"
+          },
+          "$other": {
+            ".validate": false
           }
         }
       }

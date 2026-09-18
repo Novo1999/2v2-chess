@@ -1,9 +1,11 @@
 import type { Slot } from '../game/types';
 import { SLOT_COLOR } from '../game/types';
 import type { NetGame, Offer } from '../net/schema';
-import { allSeatsFilled, canStart, seatsOf } from '../net/schema';
+import { allSeatsFilled, canStart, isHost, seatsOf } from '../net/schema';
 import { consentOutstanding, heldByOther } from '../net/writes';
 import { PresenceIcon } from './Presence';
+import { InvitePanel } from './InvitePanel';
+import { displayName } from '../names';
 
 interface Props {
   gameId: string;
@@ -157,6 +159,19 @@ export function Lobby({
           </div>
         ))}
       </div>
+
+      {/* The host's alone, and only here in the lobby — rules refuse it from
+          anybody else and from any game already under way. */}
+      {isHost(game, uid) && (
+        <InvitePanel
+          me={uid}
+          myName={displayName(name)}
+          gameId={gameId}
+          seated={seats
+            .map((slot) => game.players?.[slot]?.uid)
+            .filter((held): held is string => Boolean(held))}
+        />
+      )}
 
       <p className="hint">{hintFor({ mySlot, named, ready, full })}</p>
 

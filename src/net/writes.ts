@@ -46,10 +46,12 @@ export type Update = Record<string, unknown>;
 /** The whole node, for the one write that creates a game. */
 export function newGameNode(
   seats: SeatCount,
+  host: string,
   clockMs: number = DEFAULT_CLOCK_MS,
 ): Update {
   return {
     fen: START_FEN,
+    host,
     turnIndex: 0,
     toMove: 'P1',
     rotation: rotationFor(seats),

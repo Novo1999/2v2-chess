@@ -83,6 +83,8 @@ export interface SeatHold {
 
 export interface NetGame {
   fen: string;
+  /** Whoever opened the room. The only player who may invite into it. */
+  host: string;
   turnIndex: number;
   toMove: Slot;
   rotation: Rotation;
@@ -187,6 +189,11 @@ export function armyManned(game: NetGame, army: 'w' | 'b'): boolean {
  */
 export function canStart(game: NetGame): boolean {
   return armyManned(game, 'w') && armyManned(game, 'b');
+}
+
+/** Whoever opened the room. Invites are theirs alone, and only in the lobby. */
+export function isHost(game: NetGame, uid: string | null): boolean {
+  return uid !== null && game.host === uid;
 }
 
 /** True when this seat is carrying its army alone. */

@@ -63,6 +63,10 @@ Emulator data is thrown away when you stop it.
   panel opens a slider over five amounts — 15s, 30s, 1m, 2m, 5m — and hands the
   chosen one straight to your opponents. Always to them, never to yourself, as
   often as you like.
+- **Online now** on the home screen lists everyone with the app open, so you can
+  see who is about before reading a room code out. Players show under the name
+  they typed; anyone who typed none gets a handle their browser mints once and
+  keeps, so the list is legible rather than four rows of "Anonymous".
 - Right-click while dragging a piece to cancel the move and put it back.
 - Online players can select or drag a piece while waiting to queue one premove.
   Both squares turn blue. It plays automatically on your seat's next turn if
@@ -162,6 +166,8 @@ src/game/      chess.js + the turn gate. No network, no React.
 src/net/       schema, writes as plain update objects, listeners, seats.
 src/components/board, move list, clocks, lobby, trays.
 src/components/controls.tsx  the shared Base UI controls
+src/names.ts         handles for players who never typed a name
+src/net/presence.ts  who has the app open, app-wide
 rules/build.mjs      generates database.rules.json  <- edit this, not the JSON
 rules/*.test.ts      emulator suites
 ```
@@ -208,6 +214,13 @@ model — a griefing teammate was never defended against (PLAN.md residual #6):
 - Anybody signed in can hold an empty seat for two seconds at a time. Holding it
   shut means renewing that forever, and it never takes a seat off somebody who
   is already sitting in it.
+- **The online list is public to every signed-in client**, which is what makes it
+  a list at all. An entry carries a name and a timestamp and nothing else — no
+  game, no seat, no history — and exists only while that browser is connected.
+  Nobody can write anybody else's entry, and the timestamp is checked against
+  `now`, so a client cannot post-date itself to look permanently online.
+- Opening the app now signs you in anonymously straight away, rather than at the
+  first room you create or join, because being listed needs an identity.
 
 ## Artwork
 

@@ -758,8 +758,23 @@ button.big { padding: 10px; }
   text-align: left;
   font-variant-numeric: tabular-nums;
 }
-.movelist button.half:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); }
-.movelist button.half[aria-current='true'] { background: var(--text); color: var(--accent-ink); }
+/*
+ * Both states are a translucent white wash rather than a fill.
+ *
+ * Inverting the current move to a solid white block was too loud for a list
+ * you scan, and it broke the seat tag inside it — `.by` is --muted grey, which
+ * on white is barely there. A wash keeps the text the same colour it is
+ * everywhere else, so only the emphasis changes, not the legibility.
+ */
+.movelist button.half:hover:not(:disabled) { background: rgba(255, 255, 255, 0.07); }
+.movelist button.half[aria-current='true'] {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+}
+.movelist button.half[aria-current='true']:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
+}
 .movelist li:has(button.half[aria-current='true']) .movenum { color: var(--text); }
 
 .history-nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
@@ -1143,27 +1158,23 @@ h2 { letter-spacing: -0.15px; }
 /* ---- home ---- */
 
 /*
- * Three ways in, laid out by how much deciding each one takes. Opening a table
- * has choices to make, so it gets the tall column; joining and hot seat are one
- * action each and sit stacked beside it. Name above all three because they all
- * need it; appearance below, because it is a preference and not a way in.
+ * Two columns that stack independently, rather than a grid of areas.
+ *
+ * A grid row is as tall as its tallest card, so putting the short "Your name"
+ * card beside the tall "Board & pieces" one left a hole under the name that
+ * nothing could fill. Columns that flow on their own have no rows to line up,
+ * so each card sits directly under the one above it.
+ *
+ * Left is the sequence you read on arrival — who you are, opening a table, who
+ * is about. Right is everything you might reach for instead.
  */
 .home {
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
-  grid-template-areas:
-    'name name'
-    'play join'
-    'play local'
-    'look look';
   gap: 16px;
   align-items: start;
 }
-.name-card { grid-area: name; }
-.play-card { grid-area: play; }
-.join-card { grid-area: join; }
-.local-card { grid-area: local; }
-.look-card { grid-area: look; }
+.home-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 
 .name-card .field { max-width: 320px; }
 
@@ -1191,11 +1202,28 @@ h2 { letter-spacing: -0.15px; }
 button.big { padding: 10px 16px; font-size: 15px; }
 
 @media (max-width: 760px) {
-  .home {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: 'name' 'play' 'join' 'local' 'look';
-  }
+  /* One column: the stacks dissolve so the cards flow in source order. */
+  .home { grid-template-columns: minmax(0, 1fr); }
+  .home-col { display: contents; }
   .play-card,
   .join-card,
   .local-card { height: auto; }
 }
+
+/* ---- who is online ---- */
+
+.onlinelist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.onlinelist li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 2px;
+  border-bottom: 1px solid var(--line);
+}
+.onlinelist li:last-child { border-bottom: 0; }
+.online-name { font-weight: 600; }
+/* `.presence` carries margin-left:auto so the dot sits at the far end of a seat
+   row. Here it leads the row instead, and that auto would push the whole line
+   to the right — the same reset `.seat .presence` already makes. */
+.onlinelist .presence { margin-left: 0; }
+.onlinelist li .you { margin-left: auto; }

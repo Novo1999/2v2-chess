@@ -39,12 +39,12 @@ export async function createGame(
 ): Promise<string> {
   // The availability check below is a read, and rules deny reads to anyone
   // signed out. The home screen has no identity of its own, so take one here.
-  await signIn();
+  const host = await signIn();
   for (let attempt = 0; attempt < 5; attempt++) {
     const code = randomCode();
     const snap = await get(ref(db, `games/${code}/status`));
     if (snap.exists()) continue;
-    await set(ref(db, `games/${code}`), newGameNode(seats, clockMs));
+    await set(ref(db, `games/${code}`), newGameNode(seats, host, clockMs));
     return code;
   }
   throw new Error('could not find a free room code');

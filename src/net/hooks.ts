@@ -16,10 +16,12 @@ export type Loading<T> =
   | { state: 'error'; message: string };
 
 /** Anonymous sign-in, held for the life of the tab. */
-export function useIdentity(): Loading<string> {
+export function useIdentity(enabled = true): Loading<string> {
   const [result, setResult] = useState<Loading<string>>({ state: 'loading' });
 
   useEffect(() => {
+    // A build with no database configured has nothing to sign in to.
+    if (!enabled) return;
     let live = true;
     signIn().then(
       (uid) => live && setResult({ state: 'ready', value: uid }),
@@ -28,7 +30,7 @@ export function useIdentity(): Loading<string> {
     return () => {
       live = false;
     };
-  }, []);
+  }, [enabled]);
 
   return result;
 }

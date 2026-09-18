@@ -24,6 +24,7 @@ import {
   RESERVE_MS as CLIENT_RESERVE_MS,
   giftUpdate,
   moveUpdate,
+  newGameNode,
   offerFields,
   startUpdate,
   swapSettleUpdate,
@@ -78,6 +79,8 @@ interface SeedOptions {
   seats?: 2 | 4;
   status?: NetGame['status'];
   clocks?: { w: number; b: number };
+  /** Who opened the room. Defaults to P1, who is also the first seat. */
+  host?: string;
   /** The seat on move. Defaults to P1, the start of the rotation. */
   toMove?: Slot;
   /** Seats to fill. Defaults to every seat the rotation uses. */
@@ -108,6 +111,7 @@ async function seed(options: SeedOptions = {}): Promise<NetGame> {
 
   const game: NetGame = {
     fen,
+    host: options.host ?? UID.P1,
     // The client rules layer derives whose turn it is from `turnIndex`, so a
     // seeded `toMove` has to agree with it or `moveUpdate` refuses the move
     // before any of this reaches the database.
@@ -713,7 +717,7 @@ describe('the game node itself', () => {
     await assertFails(set(ref(as('P1'), `games/${GID}/backdoor`), true));
   });
 
-  it('refuses writes anywhere outside the three known roots', async () => {
+  it('refuses writes anywhere outside the five known roots', async () => {
     await assertFails(set(ref(as('P1'), 'somewhere/else'), true));
   });
 });
@@ -1038,5 +1042,213 @@ describe('handing the other team fifteen seconds', () => {
 
   it('keeps the steps in step with the client', () => {
     expect(GIFT_STEPS).toEqual([...CLIENT_GIFT_STEPS]);
+  });
+});
+
+describe('who is online', () => {
+  const entry = () => ({ name: 'Skibidi Rizzler', at: { '.sv': 'timestamp' } });
+
+  it('lets a signed-in player announce themselves', async () => {
+    await assertSucceeds(set(ref(as('P1'), `presence/${UID.P1}`), entry()));
+  });
+
+  it('lets everyone signed in read the list — that is the whole point of it', async () => {
+    await assertSucceeds(set(ref(as('P1'), `presence/${UID.P1}`), entry()));
+    await assertSucceeds(get(ref(asStranger(), 'presence')));
+  });
+
+  it('refuses the list to somebody signed out', async () => {
+    await assertFails(get(ref(asAnon(), 'presence')));
+  });
+
+  it('refuses announcing somebody else', async () => {
+    await assertFails(set(ref(as('P1'), `presence/${UID.P3}`), entry()));
+  });
+
+  it('refuses removing somebody else from the list', async () => {
+    await assertSucceeds(set(ref(as('P3'), `presence/${UID.P3}`), entry()));
+    await assertFails(set(ref(as('P1'), `presence/${UID.P3}`), null));
+  });
+
+  it('lets a player remove their own entry on the way out', async () => {
+    await assertSucceeds(set(ref(as('P1'), `presence/${UID.P1}`), entry()));
+    await assertSucceeds(set(ref(as('P1'), `presence/${UID.P1}`), null));
+  });
+
+  // Without this a client could post-date itself and sit at the top of the
+  // list for ever, outliving both its heartbeat and the staleness filter.
+  it('refuses a post-dated heartbeat', async () => {
+    await assertFails(
+      set(ref(as('P1'), `presence/${UID.P1}`), { name: 'Sigma Yapper', at: Date.now() + 600000 }),
+    );
+  });
+
+  it('refuses a backdated one too', async () => {
+    await assertFails(
+      set(ref(as('P1'), `presence/${UID.P1}`), { name: 'Sigma Yapper', at: Date.now() - 600000 }),
+    );
+  });
+
+  it('refuses an entry with no name', async () => {
+    await assertFails(set(ref(as('P1'), `presence/${UID.P1}`), { at: { '.sv': 'timestamp' } }));
+    await assertFails(
+      set(ref(as('P1'), `presence/${UID.P1}`), { name: '', at: { '.sv': 'timestamp' } }),
+    );
+  });
+
+  it('refuses a name longer than the field allows', async () => {
+    await assertFails(
+      set(ref(as('P1'), `presence/${UID.P1}`), {
+        name: 'x'.repeat(25),
+        at: { '.sv': 'timestamp' },
+      }),
+    );
+  });
+
+  it('refuses smuggling an extra field into an entry', async () => {
+    await assertFails(
+      set(ref(as('P1'), `presence/${UID.P1}`), {
+        name: 'Sigma Yapper',
+        at: { '.sv': 'timestamp' },
+        secret: 'a-secret-of-sufficient-length-01',
+      }),
+    );
+  });
+
+  it('carries nothing that links a player to a game they are in', async () => {
+    await assertSucceeds(set(ref(as('P1'), `presence/${UID.P1}`), entry()));
+    const snap = await assertSucceeds(get(ref(as('P3'), `presence/${UID.P1}`)));
+    expect(Object.keys(snap.val() as object).sort()).toEqual(['at', 'name']);
+  });
+});
+
+describe('inviting somebody to a room', () => {
+  const invite = (game = GID) => ({ name: 'Sigma Yapper', game, at: { '.sv': 'timestamp' } });
+  const box = (to: Slot, from: Slot) => `invites/${UID[to]}/${UID[from]}`;
+
+  it('lets the host invite while the table is still being settled', async () => {
+    await seed({ status: 'lobby', host: UID.P1, fill: ['P1'] });
+    await assertSucceeds(set(ref(as('P1'), box('P3', 'P1')), invite()));
+  });
+
+  it('lets the invited player read their own box', async () => {
+    await seed({ status: 'lobby', host: UID.P1, fill: ['P1'] });
+    await assertSucceeds(set(ref(as('P1'), box('P3', 'P1')), invite()));
+    await assertSucceeds(get(ref(as('P3'), `invites/${UID.P3}`)));
+  });
+
+  // Otherwise an invite box is a second way to discover what rooms exist.
+  it('refuses reading somebody else’s box', async () => {
+    await seed({ status: 'lobby', host: UID.P1, fill: ['P1'] });
+    await assertSucceeds(set(ref(as('P1'), box('P3', 'P1')), invite()));
+    await assertFails(get(ref(as('P1'), `invites/${UID.P3}`)));
+    await assertFails(get(ref(asStranger(), `invites/${UID.P3}`)));
+  });
+
+  it('refuses an invite from a player who is not the host', async () => {
+    await seed({ status: 'lobby', host: UID.P1, fill: ['P1', 'P2'] });
+    await assertFails(set(ref(as('P2'), box('P3', 'P2')), invite()));
+  });
+
+  it('refuses an invite from somebody with no seat at all', async () => {
+    await seed({ status: 'lobby', host: UID.P1, fill: ['P1'] });
+    await assertFails(set(ref(asStranger(), `invites/${UID.P3}/uid-nobody`), invite()));
+  });
+
+  // "Before the match starts, during the seat taking time."
+  it('refuses an invite once the clocks are running', async () => {
+    await seed({ status: 'active', host: UID.P1 });
+    await assertFails(set(ref(as('P1'), box('P3', 'P1')), invite()));
+  });
+
+  it('refuses an invite once the game is over', async () => {
+    await seed({ status: 'checkmate', host: UID.P1 });
+    await assertFails(set(ref(as('P1'), box('P3', 'P1')), invite()));
+  });
+
+  it('refuses posting an invite under somebody else’s name', async () => {
+    await seed({ status: 'lobby', host: UID.P1, fill: ['P1'] });
+    // P1 is the host, but this slot belongs to P2 — forging the sender would
+    // let one person fill a box with invites that all look like new people.
+    await assertFails(set(ref(as('P1'), box('P3', 'P2')), invite()));
+  });
+
+  it('refuses an invite to a room that does not exist', async () => {
+    await seed({ status: 'lobby', host: UID.P1, fill: ['P1'] });
+    await assertFails(set(ref(as('P1'), box('P3', 'P1')), invite('NOSUCH')));
+  });
+
+  it('refuses a backdated invite', async () => {
+    await seed({ status: 'lobby', host: UID.P1, fill: ['P1'] });
+    await assertFails(
+      set(ref(as('P1'), box('P3', 'P1')), {
+        name: 'Sigma Yapper',
+        game: GID,
+        at: Date.now() - 600000,
+      }),
+    );
+  });
+
+  it('refuses an unknown field smuggled into an invite', async () => {
+    await seed({ status: 'lobby', host: UID.P1, fill: ['P1'] });
+    await assertFails(
+      set(ref(as('P1'), box('P3', 'P1')), { ...invite(), slot: 'P3' }),
+    );
+  });
+
+  it('lets the recipient clear it once they have acted', async () => {
+    await seed({ status: 'lobby', host: UID.P1, fill: ['P1'] });
+    await assertSucceeds(set(ref(as('P1'), box('P3', 'P1')), invite()));
+    await assertSucceeds(set(ref(as('P3'), box('P3', 'P1')), null));
+  });
+
+  it('lets the host withdraw one they sent', async () => {
+    await seed({ status: 'lobby', host: UID.P1, fill: ['P1'] });
+    await assertSucceeds(set(ref(as('P1'), box('P3', 'P1')), invite()));
+    await assertSucceeds(set(ref(as('P1'), box('P3', 'P1')), null));
+  });
+
+  it('refuses a bystander clearing an invite that is not theirs', async () => {
+    await seed({ status: 'lobby', host: UID.P1, fill: ['P1'] });
+    await assertSucceeds(set(ref(as('P1'), box('P3', 'P1')), invite()));
+    await assertFails(set(ref(as('P2'), box('P3', 'P1')), null));
+  });
+
+  /**
+   * Keyed by sender, so pressing the button twice replaces rather than stacks.
+   * That is the only thing standing between a player and a flooded box.
+   */
+  it('keeps one slot per sender, so a second invite replaces the first', async () => {
+    await seed({ status: 'lobby', host: UID.P1, fill: ['P1'] });
+    await assertSucceeds(set(ref(as('P1'), box('P3', 'P1')), invite()));
+    await assertSucceeds(set(ref(as('P1'), box('P3', 'P1')), invite()));
+    const snap = await assertSucceeds(get(ref(as('P3'), `invites/${UID.P3}`)));
+    expect(Object.keys(snap.val() as object)).toEqual([UID.P1]);
+  });
+});
+
+describe('who opened the room', () => {
+  it('records the creator as the host', async () => {
+    await assertSucceeds(
+      set(ref(as('P1'), `games/NEWROOM`), newGameNode(4, UID.P1)),
+    );
+  });
+
+  it('refuses a room that claims somebody else as its host', async () => {
+    await assertFails(set(ref(as('P1'), `games/NEWROOM`), newGameNode(4, UID.P3)));
+  });
+
+  it('refuses a room with no host at all', async () => {
+    const node = newGameNode(4, UID.P1);
+    delete node['host'];
+    await assertFails(set(ref(as('P1'), `games/NEWROOM`), node));
+  });
+
+  // The game node grants write only while it does not exist, so there is no
+  // path that can reach `host` afterwards — not even for the host themselves.
+  it('cannot be changed once the room exists', async () => {
+    await seed({ status: 'lobby', host: UID.P1 });
+    await assertFails(set(ref(as('P1'), `games/${GID}/host`), UID.P1));
+    await assertFails(set(ref(as('P3'), `games/${GID}/host`), UID.P3));
   });
 });

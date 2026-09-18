@@ -32,6 +32,7 @@ const NAMES: Partial<Record<Slot, string>> = {
 function game(fill: Slot[], overrides: Partial<NetGame> = {}): NetGame {
   return {
     fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+    host: UID.P1,
     turnIndex: 0,
     toMove: 'P1',
     rotation: ROTATION_4,

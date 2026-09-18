@@ -5,6 +5,9 @@ import { LocalGame } from './LocalGame';
 import { OnlineGame } from './OnlineGame';
 import { isConfigured } from './net/firebase';
 import { useIdentity } from './net/hooks';
+import { useAnnouncePresence } from './net/presence';
+import { displayName } from './names';
+import { InviteBanner } from './components/InviteBanner';
 import { gameHash, parseHash, type Route } from './route';
 
 const NAME_KEY = 'consultation-chess:name';
@@ -18,6 +21,13 @@ export default function App() {
       return '';
     }
   });
+
+  // Being listed as online is app-wide, not a home-screen feature: somebody
+  // deep in a game is still about. It needs an identity, so this is also what
+  // signs the tab in on arrival rather than at the first write.
+  const identity = useIdentity(isConfigured);
+  const me = identity.state === 'ready' ? identity.value : null;
+  useAnnouncePresence(me, displayName(name));
 
   useEffect(() => {
     const onChange = () => setRoute(parseHash(window.location.hash));
@@ -63,9 +73,12 @@ export default function App() {
         )}
       </header>
 
+      <InviteBanner me={me} onOpen={(id) => go(gameHash(id))} />
+
       {route.at === 'home' && (
         <Home
           name={name}
+          me={me}
           onName={rename}
           onOpen={(id) => go(gameHash(id))}
           onHotSeat={() => go('/local')}

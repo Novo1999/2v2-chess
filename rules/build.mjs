@@ -194,6 +194,9 @@ const claimable =
  */
 const vacating = `(!newData.exists() && ${holds('$slot')})`;
 
+/** The game an invite points at, read from the invite being written. */
+const invitedGame = `root.child('games').child(newData.child('game').val())`;
+
 const SLOT_ENUM =
   "newData.val() === 'P1' || newData.val() === 'P2'" +
   " || newData.val() === 'P3' || newData.val() === 'P4'";
@@ -272,7 +275,7 @@ const rules = {
         // Creation only. Never grants again, and never permits deletion.
         '.write': 'auth != null && !data.exists() && newData.exists()',
         '.validate':
-          "newData.hasChildren(['fen','turnIndex','toMove','rotation','status','seats','clocks'])",
+          "newData.hasChildren(['fen','turnIndex','toMove','rotation','status','seats','clocks','host'])",
 
         turnIndex: {
           // The single authorisation site for a move.
@@ -425,6 +428,15 @@ const rules = {
 
         rotation: { $slot: { '.validate': SLOT_ENUM } },
         seats: { '.validate': 'newData.val() === 2 || newData.val() === 4' },
+        /**
+         * Whoever opened the room, and the only player who may invite into it.
+         *
+         * It needs no `.write` of its own and must not have one: the game node
+         * grants write access only when it does not yet exist, so this is
+         * settled at creation and no later path can reach it. Immutable by
+         * construction rather than by a rule that has to be got right.
+         */
+        host: { '.validate': 'newData.val() === auth.uid' },
         initialClock: { '.validate': 'newData.isNumber() && newData.val() > 0' },
         createdAt: { '.validate': 'newData.val() === now' },
         $other: { '.validate': false },
@@ -455,6 +467,70 @@ const rules = {
             '.write': 'auth != null && auth.uid === $uid',
             '.validate': 'newData.isString() && newData.val().length >= 20',
           },
+        },
+      },
+    },
+
+    /**
+     * Who has the app open. Deliberately readable by every signed-in client —
+     * a list of who is about is the entire point of it, and there is no way to
+     * show one without publishing one.
+     *
+     * Nobody may write anybody else's entry, and `at` is validated against
+     * `now`, so a client cannot post-date itself to look permanently online.
+     * The entry carries a name and nothing else: no uid to correlate, no game,
+     * no seat, and no history — it exists only while the socket does.
+     */
+    presence: {
+      '.read': 'auth != null',
+      $uid: {
+        '.write': 'auth != null && auth.uid === $uid',
+        '.validate': "newData.hasChildren(['name','at'])",
+        name: {
+          '.validate':
+            'newData.isString() && newData.val().length > 0 && newData.val().length <= 24',
+        },
+        at: { '.validate': 'newData.val() === now' },
+        $other: { '.validate': false },
+      },
+    },
+
+    /**
+     * "Come and play": a room code put into somebody's box.
+     *
+     * Readable only by its recipient, so an invite is not a second way to
+     * discover what rooms exist — and keyed by the SENDER rather than a push
+     * id, which is the whole anti-spam story. One person owns exactly one slot
+     * in your box, so a second invite from them replaces their first instead of
+     * stacking up; there is nothing to flood you with.
+     *
+     * The room has to exist. Without that check an invite is an arbitrary
+     * string written into another player's tree.
+     */
+    invites: {
+      $to: {
+        '.read': 'auth != null && auth.uid === $to',
+        $from: {
+          // Sending is the host's alone, and only while the table is still
+          // being settled. Either party may clear it afterwards — which is a
+          // separate branch because a delete carries no `game` to look up.
+          '.write':
+            `auth != null && ((!newData.exists() && (auth.uid === $to || auth.uid === $from))` +
+            ` || (auth.uid === $from && ${invitedGame}.child('host').val() === auth.uid` +
+            ` && ${invitedGame}.child('status').val() === 'lobby'))`,
+          '.validate':
+            "newData.hasChildren(['name','game','at'])" +
+            ` && ${invitedGame}.exists()`,
+          name: {
+            '.validate':
+              'newData.isString() && newData.val().length > 0 && newData.val().length <= 24',
+          },
+          game: {
+            '.validate':
+              'newData.isString() && newData.val().length >= 4 && newData.val().length <= 8',
+          },
+          at: { '.validate': 'newData.val() === now' },
+          $other: { '.validate': false },
         },
       },
     },

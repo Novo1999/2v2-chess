@@ -5,9 +5,13 @@ import { DEFAULT_CLOCK_MS } from './net/writes';
 import type { SeatCount } from './net/schema';
 import { AppearancePicker } from './components/AppearancePicker';
 import { ChoiceGroup } from './components/controls';
+import { HEARTBEAT_MS, liveOnly, useOnlinePlayers } from './net/presence';
+import { useTick } from './net/hooks';
 
 interface Props {
   name: string;
+  /** This tab's uid, so it can mark itself in the online list. */
+  me: string | null;
   onName: (name: string) => void;
   onOpen: (gameId: string) => void;
   onHotSeat: () => void;
@@ -29,7 +33,7 @@ const CLOCK_CHOICES = [
  * Your name comes first because every one of the three needs it, and the
  * appearance sits last because it is a preference, not a way in.
  */
-export function Home({ name, onName, onOpen, onHotSeat }: Props) {
+export function Home({ name, me, onName, onOpen, onHotSeat }: Props) {
   const [code, setCode] = useState('');
   const [seats, setSeats] = useState<SeatCount>(4);
   const [clock, setClock] = useState(DEFAULT_CLOCK_MS);
@@ -49,6 +53,7 @@ export function Home({ name, onName, onOpen, onHotSeat }: Props) {
 
   return (
     <div className="home">
+      <div className="home-col">
       <section className="card name-card">
         <label className="field">
           <span className="label">Your name</span>
@@ -139,6 +144,27 @@ export function Home({ name, onName, onOpen, onHotSeat }: Props) {
         </div>
       </section>
 
+      <section className="card online-card">
+        <header className="card-head">
+          <h2>Online now</h2>
+          <p className="hint">
+            Everyone with the app open. Read a room code out to whoever you want
+            at your table.
+          </p>
+        </header>
+        <OnlineList me={me} />
+      </section>
+      </div>
+
+      <div className="home-col">
+      <section className="card look-card">
+        <header className="card-head">
+          <h2>Board &amp; pieces</h2>
+          <p className="hint">Saved in this browser. Change it any time, in a game too.</p>
+        </header>
+        <AppearancePicker />
+      </section>
+
       <section className="card join-card">
         <header className="card-head">
           <h2>Join a table</h2>
@@ -184,14 +210,39 @@ export function Home({ name, onName, onOpen, onHotSeat }: Props) {
           <button onClick={onHotSeat}>Play locally</button>
         </div>
       </section>
-
-      <section className="card look-card">
-        <header className="card-head">
-          <h2>Board &amp; pieces</h2>
-          <p className="hint">Saved in this browser. Change it any time, in a game too.</p>
-        </header>
-        <AppearancePicker />
-      </section>
+      </div>
     </div>
+  );
+}
+
+/**
+ * Who else has the app open. Anyone who never typed a name is shown by the
+ * handle their browser minted for them (see names.ts) — a list of four
+ * "Anonymous" rows tells you nothing.
+ */
+function OnlineList({ me }: { me: string | null }) {
+  const players = useOnlinePlayers(isConfigured);
+  // The heartbeat is the freshness signal, so the list has to re-read the clock
+  // on its own to drop somebody whose machine went to sleep.
+  useTick(HEARTBEAT_MS, isConfigured);
+  const live = liveOnly(players, Date.now());
+
+  if (!isConfigured) {
+    return <p className="hint">Needs a database — see “Open a table” above.</p>;
+  }
+  if (live.length === 0) {
+    return <p className="hint">Nobody yet. You will appear here for others.</p>;
+  }
+
+  return (
+    <ul className="onlinelist">
+      {live.map((player) => (
+        <li key={player.uid}>
+          <span className="presence presence-on" aria-hidden="true" />
+          <span className="online-name">{player.name}</span>
+          {player.uid === me && <span className="you">you</span>}
+        </li>
+      ))}
+    </ul>
   );
 }
