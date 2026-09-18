@@ -36,20 +36,24 @@ export function useIdentity(enabled = true): Loading<string> {
 }
 
 /** The single listener. Every rendered thing downstream is a view of this. */
-export function useGame(gameId: string | null): Loading<NetGame> {
+export function useGame(
+  gameId: string | null,
+  onSnapshot?: (game: NetGame | null) => void,
+): Loading<NetGame> {
   const [result, setResult] = useState<Loading<NetGame>>({ state: 'loading' });
+  const observer = useRef(onSnapshot);
+  observer.current = onSnapshot;
 
   useEffect(() => {
     if (!gameId) return;
     setResult({ state: 'loading' });
     return onValue(
       ref(getDb(), `games/${gameId}`),
-      (snap) =>
-        setResult(
-          snap.exists()
-            ? { state: 'ready', value: snap.val() as NetGame }
-            : { state: 'missing' },
-        ),
+      (snap) => {
+        const game = snap.exists() ? snap.val() as NetGame : null;
+        observer.current?.(game);
+        setResult(game ? { state: 'ready', value: game } : { state: 'missing' });
+      },
       (err) => setResult({ state: 'error', message: err.message }),
     );
   }, [gameId]);

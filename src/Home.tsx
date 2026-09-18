@@ -25,7 +25,7 @@ const CLOCK_CHOICES = [
 ];
 
 /**
- * There are exactly three ways to start playing — open a table, join somebody
+ * There are exactly three ways to start playing — open a room, join somebody
  * else's, or play everyone's seat on this device — so the page is laid out as
  * those three, with the one that takes decisions given the room to make them
  * and the two that take a moment kept small beside it.
@@ -72,7 +72,7 @@ export function Home({ name, me, onName, onOpen, onHotSeat }: Props) {
 
       <section className="card play-card">
         <header className="card-head">
-          <h2>Open a table</h2>
+          <h2>Open a room</h2>
           <p className="hint">
             You get a room code to read out. Everyone else joins with it.
           </p>
@@ -100,9 +100,9 @@ export function Home({ name, me, onName, onOpen, onHotSeat }: Props) {
         )}
 
         <div className="field">
-          <span className="label">Table</span>
+          <span className="label">Players</span>
           <ChoiceGroup
-            label="Table"
+            label="Players"
             className="wide"
             value={String(seats)}
             onChange={(next) => setSeats(Number(next) as SeatCount)}
@@ -149,7 +149,7 @@ export function Home({ name, me, onName, onOpen, onHotSeat }: Props) {
           <h2>Online now</h2>
           <p className="hint">
             Everyone with the app open. Read a room code out to whoever you want
-            at your table.
+            in your room.
           </p>
         </header>
         <OnlineList me={me} />
@@ -159,7 +159,7 @@ export function Home({ name, me, onName, onOpen, onHotSeat }: Props) {
       <div className="home-col">
       <section className="card join-card">
         <header className="card-head">
-          <h2>Join a table</h2>
+          <h2>Join a room</h2>
           <p className="hint">Somebody read you five characters.</p>
         </header>
 
@@ -228,7 +228,7 @@ function OnlineList({ me }: { me: string | null }) {
   const live = liveOnly(players, Date.now());
 
   if (!isConfigured) {
-    return <p className="hint">Needs a database — see “Open a table” above.</p>;
+    return <p className="hint">Needs a database — see “Open a room” above.</p>;
   }
   if (live.length === 0) {
     return <p className="hint">Nobody yet. You will appear here for others.</p>;

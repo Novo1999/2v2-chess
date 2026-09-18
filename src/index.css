@@ -1099,6 +1099,37 @@ button.big { padding: 10px; }
 
 .give-confirm { width: 100%; margin-top: 0.25rem; }
 
+/* ---- time donations ---- */
+
+.gift-toast-viewport {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 1000;
+  width: min(360px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 10px;
+  pointer-events: none;
+}
+.gift-toast {
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
+  color: var(--text);
+  pointer-events: auto;
+  transform: translateX(var(--toast-swipe-movement-x, 0px));
+  transition: opacity 150ms ease-out, transform 150ms ease-out;
+}
+.gift-toast[data-starting-style],
+.gift-toast[data-ending-style] { opacity: 0; transform: translateX(20px); }
+.gift-toast[data-limited] { display: none; }
+.gift-toast-content { display: flex; align-items: center; gap: 12px; padding: 14px; }
+.gift-toast-title { flex: 1; min-width: 0; margin: 0; font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+.gift-toast-close { flex: none; padding: 4px 8px; font-size: 18px; }
+@media (prefers-reduced-motion: reduce) {
+  .gift-toast { transition: none; }
+}
+
 /* ---- tooltip ---- */
 
 .tooltip {

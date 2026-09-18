@@ -48,6 +48,7 @@ import { GameView } from './components/GameView';
 import { Lobby } from './components/Lobby';
 import { Clock } from './components/Clock';
 import { OfferPanel } from './components/OfferPanel';
+import { TimeGiftToasts, useTimeGiftToasts } from './components/TimeGiftToasts';
 
 interface Props {
   gameId: string;
@@ -58,7 +59,8 @@ interface Props {
 }
 
 export function OnlineGame({ gameId, uid, name, onName, onLeave }: Props) {
-  const loaded = useGame(gameId);
+  const { manager, observe } = useTimeGiftToasts(gameId, uid);
+  const loaded = useGame(gameId, observe);
   const serverNow = useServerNow();
   const online = useConnected();
   const [error, setError] = useState<string | null>(null);
@@ -187,6 +189,7 @@ export function OnlineGame({ gameId, uid, name, onName, onLeave }: Props) {
 
   return (
     <>
+      <TimeGiftToasts manager={manager} />
       <GameView
         state={toGameState(live)}
         controls={canMove ? [live.toMove] : []}

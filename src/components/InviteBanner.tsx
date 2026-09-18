@@ -46,7 +46,7 @@ export function InviteBanner({
   return (
     <div className="notice invite" role="status">
       <p>
-        <strong>{invite.name}</strong> invited you to a table.{' '}
+        <strong>{invite.name}</strong> invited you to a chess match.{' '}
         <code>{invite.game}</code>
         {invites.length > 1 && (
           <span className="hint"> · {invites.length - 1} more waiting</span>
@@ -60,7 +60,7 @@ export function InviteBanner({
             onOpen(invite.game);
           }}
         >
-          Join table
+          Join room
         </button>
         <button onClick={clear}>Dismiss</button>
       </div>

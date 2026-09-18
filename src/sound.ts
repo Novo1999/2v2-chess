@@ -221,7 +221,7 @@ export function playMoveSound(kind: MoveSound): void {
   else void ac.resume().then(play, () => {});
 }
 
-/** Play once when an invitation arrives, using the same unlocked audio context. */
+/** Alert for an invitation or seat-swap request, using the unlocked audio context. */
 export function playInviteSound(): void {
   if (isMuted()) return;
   const ac = audio();

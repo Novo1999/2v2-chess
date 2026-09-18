@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { Slot } from '../game/types';
 import { SLOT_COLOR } from '../game/types';
 import type { NetGame, Offer } from '../net/schema';
@@ -6,6 +7,7 @@ import { consentOutstanding, heldByOther } from '../net/writes';
 import { PresenceIcon } from './Presence';
 import { InvitePanel } from './InvitePanel';
 import { displayName } from '../names';
+import { playInviteSound } from '../sound';
 
 interface Props {
   gameId: string;
@@ -61,6 +63,15 @@ export function Lobby({
   // lobby is the one place every player is guaranteed to pass through.
   const named = name.trim().length > 0;
   const swap = game.offer?.kind === 'swap' ? game.offer : null;
+  const swapKey = swap ? `${gameId}:${swap.by}:${swap.with}` : null;
+  const heardSwap = useRef<string | null>(null);
+
+  useEffect(() => {
+    // Every viewer hears a new request, including its sender. Keep it silent
+    // when signatures change or Firebase resolves the sender's timestamp.
+    if (swapKey && heardSwap.current !== swapKey) playInviteSound();
+    heardSwap.current = swapKey;
+  }, [swapKey]);
 
   return (
     <div className="lobby">
